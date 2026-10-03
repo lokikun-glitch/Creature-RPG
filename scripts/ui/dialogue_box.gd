@@ -15,6 +15,7 @@ var _elapsed := 0.0
 
 func _ready() -> void:
 	hide()
+	add_to_group(SaveNotice.AVOID_GROUP)
 	DialogueManager.dialogue_started.connect(func(_dialogue: DialogueData) -> void: show())
 	DialogueManager.line_shown.connect(_show_line)
 	DialogueManager.dialogue_finished.connect(func(_dialogue: DialogueData) -> void: hide())

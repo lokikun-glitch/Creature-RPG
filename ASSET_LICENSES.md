@@ -2,7 +2,7 @@
 
 Every asset in this project must be listed here. If an asset's license can't be verified, don't add it; use a placeholder instead.
 
-**Status (Milestone 001, Phases 1–12):** no third-party assets are used. All art is original programmer art created for this project.
+**Status (Milestone 001, Phases 1–13):** no third-party assets are used. All art is original programmer art created for this project.
 
 | Asset | Path | Author | Source | License | Attribution required |
 |---|---|---|---|---|---|
@@ -19,7 +19,7 @@ Every asset in this project must be listed here. If an asset's license can't be 
 | Battle backdrop | `assets/ui/battle_background.png` | Project team (generated programmer art) | Original | CC0 1.0 | No |
 | Title screen backdrop, menu cursor | `assets/ui/title_background.png`, `assets/ui/cursor.png` | Project team (generated programmer art) | Original | CC0 1.0 | No |
 | Project icon | `icon.svg` | Project team | Original | CC0 1.0 | No |
-| Buildings, interaction prompt, grass zone outline, menu panels | drawn at runtime by `scripts/world/building.gd`, `scripts/interaction/interaction_prompt.gd`, `scripts/encounters/encounter_zone.gd`, `scripts/ui/ui_style.gd` | Project team | Original (code-drawn) | CC0 1.0 | No |
+| Buildings, interaction prompt, grass zone outline, menu panels, trainer "!" marker | drawn at runtime by `scripts/world/building.gd`, `scripts/interaction/interaction_prompt.gd`, `scripts/encounters/encounter_zone.gd`, `scripts/ui/ui_style.gd`, `scripts/npc/npc.gd` | Project team | Original (code-drawn) | CC0 1.0 | No |
 
 ## Engine-bundled resources
 

@@ -59,6 +59,8 @@ var _player_home := Vector2.ZERO
 @onready var _overlay_footer: Label = %OverlayFooter
 @onready var _overlay_back: PanelContainer = %OverlayBack
 @onready var _orb: TextureRect = %Orb
+## Trainer battles only: who you're battling and how many of their creatures can still fight.
+@onready var _opponent_label: Label = %OpponentLabel
 
 
 func _ready() -> void:
@@ -101,6 +103,15 @@ func is_overlay_cancellable() -> bool:
 
 
 ## Text of each row in the creature or item list ("Empty" for free party slots).
+## "Young Trainer Rory  1/1" in trainer battles; empty (and hidden) in wild ones.
+func get_opponent_text() -> String:
+	return _opponent_label.text if _opponent_label.visible else ""
+
+
+func get_enemy_name() -> String:
+	return (_enemy_panel.get_node("%Name") as Label).text
+
+
 func get_creature_rows() -> PackedStringArray:
 	var rows := PackedStringArray()
 	for row in _overlay_list.get_children():
@@ -134,6 +145,7 @@ func _open() -> void:
 	_player_sprite.position = _player_home - Vector2(140, 0)
 	_enemy_panel.show_creature(_battle.display_name(BattleSide.Side.WILD), _battle.wild)
 	_player_panel.show_creature(_battle.display_name(BattleSide.Side.PLAYER), _battle.player)
+	_update_opponent_label()
 	_enemy_panel.modulate.a = 0.0
 	_player_panel.modulate.a = 0.0
 	_message.text = ""
@@ -143,8 +155,14 @@ func _open() -> void:
 
 
 func _play_intro() -> void:
-	await _slide(_enemy_sprite, _enemy_home, _enemy_panel)
-	await _say(BattleMessages.WILD_APPEARED.format({"name": _battle.wild.get_display_name()}))
+	if _battle.is_trainer_battle():
+		var trainer := _battle.trainer.get_title()
+		await _say(BattleMessages.TRAINER_CHALLENGE.format({"trainer": trainer}))
+		await _slide(_enemy_sprite, _enemy_home, _enemy_panel)
+		await _say(BattleMessages.TRAINER_SENT_OUT.format({"trainer": trainer, "name": _battle.wild.get_display_name()}))
+	else:
+		await _slide(_enemy_sprite, _enemy_home, _enemy_panel)
+		await _say(BattleMessages.WILD_APPEARED.format({"name": _battle.wild.get_display_name()}))
 	await _slide(_player_sprite, _player_home, _player_panel)
 	await _say(BattleMessages.SEND_OUT.format({"name": _battle.player.get_display_name()}))
 	BattleManager.begin_player_turn()
@@ -179,7 +197,11 @@ func _activate_action(action: int) -> void:
 		Action.ITEM:
 			_show_item_menu()
 		Action.RUN:
-			_resolve(BattleManager.submit_run())
+			var problem := BattleManager.get_run_problem()
+			if problem.is_empty():
+				_resolve(BattleManager.submit_run())
+			else:
+				_notice(problem)
 
 
 func _show_move_menu() -> void:
@@ -238,6 +260,19 @@ func _select_move(index: int) -> void:
 
 func _choose_move(index: int) -> void:
 	_resolve(BattleManager.submit_move(_moves[index].id))
+
+
+## Shows why an action was refused without using the turn; the action menu stays open.
+func _notice(text: String) -> void:
+	message_log.append(text)
+	_message.text = text
+
+
+func _update_opponent_label() -> void:
+	_opponent_label.visible = _battle.is_trainer_battle()
+	if _opponent_label.visible:
+		_opponent_label.text = "%s  %d/%d" % [_battle.trainer.get_title(), _battle.trainer_creatures_left(),
+				_battle.trainer_team.size()]
 
 
 ## Plays back whatever BattleManager resolved (a move or a run attempt), then continues or ends.
@@ -418,6 +453,17 @@ func _play_events(events: Array[BattleEvent]) -> void:
 					await _say(line)
 			BattleEvent.Type.FAINTED:
 				await _faint(_sprite_for(event.side))
+				if event.side == BattleSide.Side.WILD and _battle.is_trainer_battle():
+					_update_opponent_label()
+				await _say(lines[0])
+			BattleEvent.Type.TRAINER_SENT_OUT:
+				_enemy_sprite.texture = event.creature.get_species().sprite
+				_enemy_sprite.modulate = Color.WHITE
+				_enemy_sprite.scale = Vector2.ONE
+				_enemy_sprite.position = _enemy_home + Vector2(140, 0)
+				_enemy_panel.modulate.a = 0.0
+				_enemy_panel.show_creature(_battle.name_of(event.creature, BattleSide.Side.WILD), event.creature)
+				await _slide(_enemy_sprite, _enemy_home, _enemy_panel)
 				await _say(lines[0])
 			BattleEvent.Type.EXP_GAINED:
 				await _say(lines[0])

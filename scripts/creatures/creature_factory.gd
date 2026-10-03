@@ -1,6 +1,6 @@
 class_name CreatureFactory
-## The single place owned creatures are created. Starters and caught creatures use it now; gift,
-## trainer and hatched creatures (and evolution) will go through it too.
+## The single place creatures are created: owned ones (starters, caught creatures), wild ones and
+## temporary trainer ones. Gift and hatched creatures (and evolution) will go through it too.
 
 ## Makes UIDs unique even when several are generated within the same millisecond.
 static var _uid_counter := 0
@@ -34,6 +34,25 @@ static func create_from_wild(wild: CreatureInstance) -> CreatureInstance:
 	creature.status = wild.status
 	var species := wild.get_species()
 	creature.nickname = species.display_name if species else String(wild.species_id)
+	return creature
+
+
+## Builds a trainer's creature for one battle from its TrainerCreature template: full HP, the
+## listed moves (or the species' starting moves if none are listed) and the optional nickname.
+## It is temporary and belongs to nobody, so it gets no UID and is never saved. Returns null if
+## the species doesn't exist.
+static func create_from_trainer(entry: TrainerCreature) -> CreatureInstance:
+	var species := CreatureDatabase.get_species(entry.species_id) if entry else null
+	if species == null:
+		return null
+	var creature := create_from_species(species, entry.level)
+	creature.uid = ""
+	creature.nickname = entry.nickname
+	if not entry.move_ids.is_empty():
+		creature.move_ids.clear()
+		for move_id in entry.move_ids.slice(0, CreatureInstance.MAX_MOVES):
+			if CreatureDatabase.get_move(move_id):
+				creature.move_ids.append(move_id)
 	return creature
 
 

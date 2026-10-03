@@ -120,6 +120,19 @@ offset_top = 6.0
 offset_right = 122.0
 offset_bottom = 34.0
 
+[node name="OpponentLabel" type="Label" parent="Root"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 0
+offset_left = 8.0
+offset_top = 46.0
+offset_right = 160.0
+offset_bottom = 55.0
+theme_override_colors/font_color = Color(0.95, 0.92, 0.85, 1)
+theme_override_colors/font_outline_color = Color(0.13, 0.13, 0.2, 1)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/font_size = 6
+
 [node name="PlayerPanel" parent="Root" instance=ExtResource("3_panel")]
 unique_name_in_owner = true
 layout_mode = 0

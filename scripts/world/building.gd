@@ -6,8 +6,16 @@ extends StaticBody2D
 
 const TILE := 16
 const OUTLINE := Color("222034")
-## Pixels at the back of the roof the player can walk behind before colliding.
-const BACK_OVERLAP := 10
+## Collision matches the drawing, so the player's sprite never overlaps the building: the body
+## covers the roof and walls (the roof hangs 2 px past each wall), grown by how far a character
+## sprite reaches past its feet collision (1 px sideways, 2 px above the head, 12 px in front of
+## the feet; the same rule as the NPC body). Only the doorway is left open, so the player can
+## still step up to the door.
+const SIDE_MARGIN := 3
+const TOP_MARGIN := 2
+const FRONT_DEPTH := 12
+## Width of the opening in front of the door (the door itself is 12 px wide).
+const DOORWAY_WIDTH := 14
 
 @export var size_tiles := Vector2i(6, 5):
 	set(value):
@@ -71,9 +79,28 @@ func _refresh() -> void:
 	var shape_node := get_node_or_null(^"CollisionShape2D") as CollisionShape2D
 	if shape_node == null or not shape_node.shape is RectangleShape2D:
 		return
-	var body_height := size_tiles.y * TILE - BACK_OVERLAP
-	(shape_node.shape as RectangleShape2D).size = Vector2(size_tiles.x * TILE, body_height)
+	var half_width := size_tiles.x * TILE / 2.0 + SIDE_MARGIN
+	var body_height := size_tiles.y * TILE + TOP_MARGIN
+	(shape_node.shape as RectangleShape2D).size = Vector2(half_width * 2.0, body_height)
 	shape_node.position = Vector2(0, -body_height / 2.0)
+	# The strip in front of the wall, either side of the doorway.
+	var strip_width := half_width - DOORWAY_WIDTH / 2.0
+	for side in [-1.0, 1.0]:
+		var strip := _front_strip(&"FrontLeft" if side < 0.0 else &"FrontRight")
+		(strip.shape as RectangleShape2D).size = Vector2(strip_width, FRONT_DEPTH)
+		strip.position = Vector2(side * (DOORWAY_WIDTH / 2.0 + strip_width / 2.0), FRONT_DEPTH / 2.0)
+
+
+## The collision shape for one front strip, created on first use. Built in code (and never saved
+## into the scene) so every building, old or new, gets the same shape from its size.
+func _front_strip(strip_name: StringName) -> CollisionShape2D:
+	var strip := get_node_or_null(NodePath(strip_name)) as CollisionShape2D
+	if strip == null:
+		strip = CollisionShape2D.new()
+		strip.name = strip_name
+		strip.shape = RectangleShape2D.new()
+		add_child(strip)
+	return strip
 
 
 func _draw() -> void:

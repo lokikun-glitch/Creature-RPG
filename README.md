@@ -36,6 +36,7 @@ The game saves itself at checkpoints and shows a small "Game saved." notice that
 - after entering a new map, once the transition has finished;
 - after changing the lead, reordering the party, moving creatures to or from storage, or renaming;
 - after buying something;
+- after beating a trainer (the save already includes the Coins reward and the "defeated" flag);
 - when you return to the title from the pause menu.
 
 You can also save at any time with Esc → Save Game. Wild encounters and battles in progress are never saved.
@@ -87,6 +88,7 @@ The test loads the real `main.tscn` and drives it with simulated keyboard and mo
 - Route 01, tall grass and wild encounters
 - battles, items, capture, switching, storage and save version 2 / migration
 - the party screen, storage terminal, nicknames, lead and order, Coins and the shop, resting, NPC collision, Route 01's field camp, and save version 3 / migrations
+- trainer data and validation, trainer battles (challenge, restrictions, multi-creature teams, rewards, losing, no rematch), object collision and the save notice placement
 
 Encounter randomness is deterministic in tests:
 
@@ -105,6 +107,7 @@ Checks that need a real quit and relaunch start **separate Godot processes**:
 | `capture_start` → `capture_continue` → `capture_verify` | New Game → starter → catch a Pebblit → quit. Then Continue: check the caught creature exactly, switch to it and win, fill the party to 6, catch a Cindrake into storage → quit. Then a final reload checks the party, storage, items and active creature. |
 | `migrate_v1` → `migrate_verify` | Load a real version 1 save, check nothing changed and it received the starting items and 500 Coins, save it as version 3, and reload that. |
 | `migrate_v2` → `migrate_v2_verify` | Load a real version 2 save (3 orbs, a stored creature, lead in slot 2): check those are kept exactly and 500 Coins are added, save it as version 3, and reload that. |
+| `trainer_start` → `trainer_continue` → `trainer_verify` | New Game → starter → Route 01 → the Young Trainer's challenge → win → 600 Coins, autosave → quit. Relaunch, Continue: 600 Coins and the flag restored, he only chats now (no second battle or reward); then beat the Hiker's Mossaur and Rivulet → 750 Coins → quit. Relaunch again and check the exact state. |
 | `e2e_start` → `e2e_verify` | The whole Phase 12 loop: New Game → starter → save → party screen (rename to "Ember") → Route 01 battle and catch → back to Fernhollow → change the lead and reorder → rest → buy 2 Capture Orbs → deposit and withdraw at the storage terminal → reorder again → save → quit. Then relaunch, Continue and check the map, position, facing, party order, lead, nickname, HP, level, EXP, moves, status, storage, items, Coins and story flags exactly. |
 | `safety_start`, then `safety` × 5 (`run`, `lose`, `heal`, `manual`, `verify`) | Save-safety chain: New Game, Flamkit, save, beat a wild Tideclaw and level up, quit. Then repeatedly launch, Continue, check that the creature, level, EXP, HP, map, position and story state all match, and do the next scenario. |
 
@@ -127,6 +130,7 @@ scripts/interaction/    Interactable, InteractionManager, InteractionPrompt
 scripts/dialogue/       DialogueManager autoload, DialogueData, DialogueLine
 scripts/creatures/      CreatureSpecies, CreatureInstance, CreatureFactory, CreatureDatabase autoload,
                         CreatureStats (formula), CreatureProgression (EXP/levels), MoveData, ElementData, StarterSet
+scripts/trainers/       TrainerData, TrainerCreature (team templates), TrainerCatalog (static registry)
 scripts/party/          PartyManager autoload (party + active creature), CreatureStorage,
                         CreatureManagement (rules: lead, order, deposit/withdraw, rename, rest)
 scripts/economy/        Wallet (Coins), Shop (buying rules)
@@ -155,6 +159,7 @@ data/starters/          StarterSet offered by Professor Elian
 data/dialogue/          Dialogue .tres files
 assets/creatures/       Creature sprites
 data/items/             One ItemData .tres per item (capture_orb.tres)
+data/trainers/          One TrainerData .tres per trainer (young_trainer.tres, hiker.tres)
 tests/                  test_runner.gd (entry point, fails loudly) + smoke_test.gd
 ```
 
@@ -199,10 +204,19 @@ The "E" prompt shows exactly the target that pressing E would use.
 3. Create a dialogue in `data/dialogue/` (right-click → New Resource → `DialogueData`). Set `speaker`, then add `DialogueLine`s to `lines`.
 4. Assign it to the NPC's `dialogue`. An NPC with no dialogue can't be talked to.
 5. Optional: set `alternate_dialogue`, which is said instead once the GameState flag named in `alternate_flag` (default `starter_selected`) is true. That's how villagers say something different after you have a partner.
+6. Optional: set `trainer_id` to make the NPC a trainer (see Trainer battles). No new script is needed.
 
 NPCs turn to face whoever talks to them and keep that facing.
 
-**NPC collision.** Characters are drawn about 19 px above their feet, 3 px below and 5 px to each side, so a feet-only collision let the player walk up until their head covered most of an NPC. The NPC's body shape (12 × 36 px, centred 3 px above the feet) is instead the area where another character's feet would make the two sprites overlap. The player now stops just touching an NPC from every side, can still walk past beside them, and the NPC's `Interactable` reaches 26 px so you can talk from any of those spots. The player's own collision, walls, doors and other objects are unchanged.
+**NPC collision.** Characters are drawn about 19 px above their feet, 3 px below and 5 px to each side, so a feet-only collision let the player walk up until their head covered most of an NPC. The NPC's body shape (12 × 36 px, centred 3 px above the feet) is instead the area where another character's feet would make the two sprites overlap. The player now stops just touching an NPC from every side, can still walk past beside them, and the NPC's `Interactable` reaches 26 px so you can talk from any of those spots. **Object collision (Phase 13)** uses the same rule. For an object whose opaque pixels cover `x0..x1 × y0..y1` (relative to its base), the body is `x0 − 1 .. x1 + 1 × y0 − 2 .. y1 + 12`. So the player stops just touching it from any side instead of their sprite overlapping it:
+
+| Object | Body |
+|---|---|
+| Tree (`tree.tscn`) | 30 × 49, centred 11.5 px above the base |
+| Tent (`tent.tscn`) | 34 × 40, centred 8 px above the base |
+| Building (`building.gd`) | Walls and roof plus 3 px each side and 2 px above, and a 12 px strip in front of the wall with a 14 px doorway gap, so the door can still be reached and entered |
+
+Rocks, signs and the other small props keep their small bodies, so they stay easy to walk up to and read. The player's own collision is unchanged.
 
 ### Adding a sign
 
@@ -348,7 +362,7 @@ pause menu / starter event / bed / battle end / map change
 - **Nothing writes JSON except `SaveManager`.**
 - **`GameSession.save_now(reason)`** saves immediately when the game is settled: playing, a map loaded, no transition, encounter or battle running.
 - **`request_save(reason)`** is the autosave checkpoint. It saves now if that's safe; otherwise it remembers the request and saves when the current transition or battle has finished.
-- **`GameSession.game_saved(reason)`** fires after every save. The `SaveNotice` shows "Game saved.", and the reason (`manual`, `starter_selected`, `battle_victory`, `rested`, `map_entered`, `lead_changed`, `party_reordered`, `creature_deposited`, `creature_withdrawn`, `nickname_changed`, `purchase`…) helps when debugging.
+- **`GameSession.game_saved(reason)`** fires after every save. The `SaveNotice` shows "Game saved." in the first screen corner (top-right, bottom-right, top-left, bottom-left) where it covers nothing in the `save_notice_avoid` group. The Coins labels and the dialogue box are in that group; add any other UI that must stay visible. The reason (`manual`, `starter_selected`, `battle_victory`, `battle_trainer_defeated`, `rested`, `map_entered`, `lead_changed`, `party_reordered`, `creature_deposited`, `creature_withdrawn`, `nickname_changed`, `purchase`…) helps when debugging.
 - **New checkpoints** call `GameSession.request_save(&"why")`; nothing else is needed.
 - **Validation:** `SaveManager.save_game()` checks what it's about to write with the same validation used when loading, and refuses to write invalid data.
 - **Format:** version 3 since Phase 12 (see Save versions); version 1 and 2 saves still load.
@@ -391,6 +405,50 @@ While it's open, the player holds a `pause` control lock: no movement or interac
 **Resting.** The bed asks "Rest and restore your creatures?" (default NO). YES heals the party and storage: "Your creatures are fully rested." and an autosave. If everyone is already healthy: "Your creatures are already fully rested.", and nothing is saved.
 
 **Modal screens and locks.** World menus (`ConfirmPrompt`, `StorageScreen`, `ShopScreen`) extend `WorldMenu`, which holds a player control lock while open: no movement, no interaction, and no pause menu underneath. The key press that opened a menu is never treated as input to it.
+
+## Trainer battles
+
+Trainers are data, not code. A `TrainerData` resource in `data/trainers/` has an `id`, a name and a trainer class (shown together as "Young Trainer Rory"), before- and after-battle dialogue, a team of `TrainerCreature` templates (species, level, optional nickname, optional moves) and `reward_coins`. `TrainerCatalog` loads and validates them like `ItemCatalog`:
+
+- the id must be present and unique;
+- the name and class must be present;
+- there must be a non-empty team with known species, levels 1–100, at most 4 known moves each;
+- the reward must be ≥ 0;
+- both dialogues must exist.
+
+Invalid trainers are reported and never registered, and `BattleManager.start_trainer_battle()` refuses them.
+
+| Trainer (NPC on Route 01) | Team | Reward |
+|---|---|---|
+| Young Trainer Rory (`young_trainer`) | Pebblit Lv. 4 (Tackle, Quick Jab) | 100 Coins |
+| Hiker Bram (`hiker`) | Mossaur Lv. 5 (Tackle, Vine Whip), then Rivulet Lv. 5 (Tackle, Splash) | 150 Coins |
+
+**Flow:**
+
+1. Press E on the NPC; they face you and say their challenge lines.
+2. When the dialogue closes, `BattleManager.start_trainer_battle()` starts the battle.
+3. The battle opens with "Young Trainer Rory challenges you!" and "Young Trainer Rory sent out Pebblit!".
+4. A small caption under the enemy panel shows the trainer and how many of their creatures can still fight.
+
+There's no walking-into-view trigger.
+
+**Same battle, different source.** `BattleContext.source` is `SOURCE_WILD` or `SOURCE_TRAINER`; only `BattleManager` reads it:
+
+| | Wild | Trainer |
+|---|---|---|
+| Names | "Wild Pebblit" | The creature's nickname or species name |
+| Capture Orb | Works | "You can't capture another Trainer's creature." Nothing is used up, the turn isn't used, and you stay in the item menu |
+| RUN | Escape roll | "You can't run from a Trainer battle!" No roll, no turn, still choosing |
+| Opponent faints | Victory | EXP, then the next healthy creature in team order comes out; when none are left the trainer loses |
+| AI | Random valid move (`BattleAI`) | Same |
+
+**Trainer creatures** come from `CreatureFactory.create_from_trainer()`: fresh for each battle, full HP, no owned UID, and never added to the party, storage or save.
+
+**Winning** (`OUTCOME_TRAINER_DEFEATED`): "You defeated Young Trainer Rory!", then "You received 100 Coins!". The Coins go into the same `Wallet` as the shop, and `GameState` flag `trainer_<id>_defeated` is set, both before the battle closes. The autosave after returning to the world includes both. From then on the NPC says its after-battle lines, never battles again, and loses its "!" marker.
+
+**Losing** (`OUTCOME_DEFEAT`) is the existing defeat, unchanged: no reward, no flag. While nobody can fight, the trainer just chats; once healed, you can challenge them again.
+
+**Save format:** unchanged, still version 3. Defeated flags are ordinary `game_state` flags, and a save without them simply means nobody has been beaten.
 
 ## Route 01
 
@@ -463,7 +521,7 @@ EncounterManager --encounter_started(WildEncounter)--> BattleManager (rules) --e
 
 **States**
 
-- `BattleManager`: `NONE → INTRO → PLAYER_ACTION ⇄ TURN_RESOLUTION → (SWITCH_REQUIRED → PLAYER_ACTION) → VICTORY | DEFEAT | ESCAPED | CAUGHT → NONE`.
+- `BattleManager`: `NONE → INTRO → PLAYER_ACTION ⇄ TURN_RESOLUTION → (SWITCH_REQUIRED → PLAYER_ACTION) → VICTORY | DEFEAT | ESCAPED | CAUGHT → NONE`. VICTORY covers beating a wild creature and beating a trainer's whole team; `battle.outcome` tells them apart.
 - The scene's own UI states: `INTRO`, `ACTION_MENU`, `MOVE_MENU`, `CREATURE_MENU`, `ITEM_MENU`, `PLAYING`, `ENDING`.
 - Menu browsing is presentation only, so it lives in the scene. Anything that changes the battle goes through `BattleManager`:
 
@@ -482,9 +540,9 @@ EncounterManager --encounter_started(WildEncounter)--> BattleManager (rules) --e
 | Action | Status | What it does |
 |---|---|---|
 | FIGHT | Implemented | Lists the creature's own moves with element and power. |
-| RUN | Implemented | Wild battles only. Success ends the battle with no EXP and the wild creature untouched. Failure gives the wild creature a free turn. |
+| RUN | Implemented | Wild battles only (`BattleManager.get_run_problem()` refuses it in trainer battles). Success ends the battle with no EXP and the wild creature untouched. Failure gives the wild creature a free turn. |
 | CREATURE | Implemented | Lists the party straight from `PartyManager`: name, level, HP / max HP, status, an Active / Fainted tag, and "Empty" for free slots. Switching to a healthy reserve uses your turn ("Flamkit, come back!", "Go, Pebblit!", then the wild creature attacks). The active creature, fainted ones and empty slots can't be chosen; choosing one explains why. |
-| ITEM | Implemented | Lists items with quantities ("Capture Orb x5"). With none left: "Out of Capture Orbs." Nothing is consumed and the turn isn't used. |
+| ITEM | Implemented | Lists items with quantities ("Capture Orb x5"). With none left: "Out of Capture Orbs."; in a trainer battle: "You can't capture another Trainer's creature." In both cases nothing is consumed and the turn isn't used. |
 
 **The active creature** (the lead) is `PartyManager.get_active_index()` (default slot 0, saved). Choose it on the party screen; it also changes when you switch in battle. It's the creature that fights the next battle. If it can't fight when a battle starts, the first party creature that can takes over.
 
@@ -512,12 +570,13 @@ EncounterManager --encounter_started(WildEncounter)--> BattleManager (rules) --e
 | Matchup labels and messages | `BattleCalculator.element_multiplier()` | The move menu's Effective / Normal / Not very effective label comes from `BattleManager.preview_effectiveness()`. The "Super effective!" / "Not very effective..." lines come from the multiplier stored on the damage event. The UI never works out matchups itself. |
 | Accuracy | `MoveData.accuracy` | Percent. All current moves are 100. |
 | Wild AI | `BattleAI` | A random move the creature actually knows and that exists. |
-| EXP | `CreatureProgression` | Reward `max(1, wild level × 10)`. Level L → L+1 needs `L × L × 10`. `experience` is progress within the current level. |
+| EXP | `CreatureProgression` | Reward `max(1, opponent level × 10)` for each wild or trainer creature that faints. Level L → L+1 needs `L × L × 10`. `experience` is progress within the current level. |
 | Level-up | `CreatureProgression` | Stats are derived from level. Current HP rises by however much max HP grew. Level cap 100. |
 
 **How a battle ends**
 
 - **Victory:** messages, then EXP and any level-ups, then back to the world.
+- **Trainer defeated:** EXP for the last creature, "You defeated …!", "You received … Coins!", then back to the world.
 - **Capture:** the caught creature joins the party or storage, then you're back in the world. No EXP.
 - **Defeat (no usable creature):** "Flamkit fainted!" and "Your team has no other available creatures." The creature stays in the party at 0 HP and you return to the world. Encounters stay off until the party is healed.
 - **Healing:** rest in your bed at home and answer YES. It heals every owned creature, party and storage. The bed is a `HealPoint`, a reusable component on the shared `Interactable`.

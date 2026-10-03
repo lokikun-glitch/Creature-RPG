@@ -204,7 +204,7 @@ position = Vector2(344, 92)
 dialogue = ExtResource("11_sign_fernhollow")
 
 [node name="LabSign" parent="Objects/Signs" instance=ExtResource("12_sign_post")]
-position = Vector2(168, 396)
+position = Vector2(168, 404)
 dialogue = ExtResource("13_sign_research_lab")
 
 [node name="Transitions" type="Node2D" parent="."]

@@ -23,19 +23,23 @@ enum Type {
 	JOINED_PARTY,
 	SENT_TO_STORAGE,
 	SWITCH_REQUIRED,
+	TRAINER_SENT_OUT,
+	TRAINER_DEFEATED,
+	REWARD,
 }
 
 var type: Type
 ## Side the event is about (the attacker for MOVE_USED/MISSED, the target for DAMAGE/FAINTED).
 var side: BattleSide.Side
 var move_id: StringName
-## Damage dealt or EXP gained.
+## Damage dealt, EXP gained or Coins received.
 var amount := 0
 var effectiveness := 1.0
 var hp_before := 0
 var hp_after := 0
 var level := 0
-## The creature an event is about when it isn't simply the side's current one (switching, capture).
+## The creature an event is about. Set whenever it may differ from the side's current creature by
+## the time the event is shown (switching, capture, a trainer sending out the next creature).
 var creature: CreatureInstance
 
 

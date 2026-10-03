@@ -57,7 +57,7 @@ func _ready() -> void:
 		elif arg.begins_with("--scenario="):
 			scenario = arg.trim_prefix("--scenario=")
 	SaveManager.save_path = TEST_SAVE_PATH
-	if stage == "migrate_v1" or stage == "e2e_start":
+	if stage == "migrate_v1" or stage == "e2e_start" or stage == "trainer_start":
 		write_file(TEST_SAVE_PATH, JSON.stringify(V1_FIXTURE))
 	elif stage == "migrate_v2":
 		write_file(TEST_SAVE_PATH, JSON.stringify(v2_fixture()))
@@ -113,6 +113,12 @@ func _ready() -> void:
 			_run_stage.call_deferred(stage, test_e2e_start)
 		"e2e_verify":
 			_run_stage.call_deferred(stage, test_e2e_verify)
+		"trainer_start":
+			_run_stage.call_deferred(stage, test_trainer_start)
+		"trainer_continue":
+			_run_stage.call_deferred(stage, test_trainer_continue)
+		"trainer_verify":
+			_run_stage.call_deferred(stage, test_trainer_verify)
 		"new_game_arg":
 			_run_stage.call_deferred(stage, test_new_game_arg)
 
@@ -167,6 +173,12 @@ func _run() -> void:
 	await test_npc_collision()
 	await test_npc_dialogue_variants()
 	await test_route_01_polish()
+	await test_trainer_data()
+	await test_trainer_young()
+	await test_trainer_hiker()
+	await test_wild_battles_unchanged()
+	await test_object_collision()
+	await test_save_notice_placement()
 	await run_stage("battle_fresh")
 	await run_stage("new_game_arg", ["--new-game"])
 	await run_stage("safety_start")
@@ -175,6 +187,8 @@ func _run() -> void:
 	for stage in ["capture_start", "capture_continue", "capture_verify", "migrate_v1", "migrate_verify"]:
 		await run_stage(stage)
 	for stage in ["migrate_v2", "migrate_v2_verify", "e2e_start", "e2e_verify"]:
+		await run_stage(stage)
+	for stage in ["trainer_start", "trainer_continue", "trainer_verify"]:
 		await run_stage(stage)
 	await test_corrupted_saves()
 	SaveManager.delete_save()
@@ -556,12 +570,16 @@ func test_route_01() -> void:
 	check(DialogueManager.is_active() and box_text() == "Route 01\nThe first path beyond Fernhollow.", "route sign text")
 	await close_dialogue()
 	var trainer := npc(&"YoungTrainer")
+	# Phase 13: he is a trainer now. This Phase 7 check is about dialogue, so treat him as beaten
+	# (his after-battle lines); the battle itself is tested in the Phase 13 sections.
+	GameState.set_flag(TrainerData.defeated_flag_for(&"young_trainer"), true)
 	await place(trainer.global_position + Vector2(16, 0), Vector2.LEFT)
 	await press(&"interact")
 	await expect_lines("Young Trainer", [
-		"I've heard creatures are especially active in tall grass.",
+		"You're getting stronger. Keep training!",
 		"Tip: wear a wild creature down before you throw a Capture Orb. Healthy ones break free much more often.",
 	], "Young Trainer")
+	GameState.set_flag(TrainerData.defeated_flag_for(&"young_trainer"), false)
 
 
 func test_encounters_on_route() -> void:
@@ -3014,10 +3032,12 @@ func test_route_01_polish() -> void:
 			"a junction sign gives directions")
 	await close_dialogue()
 	var hiker := npc(&"Hiker")
+	GameState.set_flag(TrainerData.defeated_flag_for(&"hiker"), true)
 	await place(hiker.global_position + Vector2(0, TALK_GAP), Vector2.UP)
 	await press(&"interact")
-	await expect_lines("Hiker", ["The view from up here is great!", "On a clear day you can see all the way back to Fernhollow.",
+	await expect_lines("Hiker", ["What a battle! The view's even better after a good workout.",
 		"See the tent by the pond? Someone from the lab camps out there to study the wildlife."], "Hiker")
+	GameState.set_flag(TrainerData.defeated_flag_for(&"hiker"), false)
 	await place(Vector2(400, 600), Vector2.DOWN)
 	await hold(&"move_down", 0.8)
 	check(await wait_for_map(&"fernhollow_town"), "south still leads back to Fernhollow")
@@ -3210,6 +3230,505 @@ func test_migrate_v2_verify() -> void:
 			"stored Pebbles and 500 Coins still there")
 
 
+# --- Phase 13: trainer battles, rewards, world polish ----------------------------------------
+
+const YOUNG_TRAINER_BEFORE := ["Hey! You've got a creature of your own now!", "Let's see how strong your team has become!"]
+const YOUNG_TRAINER_AFTER := ["You're getting stronger. Keep training!",
+	"Tip: wear a wild creature down before you throw a Capture Orb. Healthy ones break free much more often."]
+const HIKER_BEFORE := ["Climbing builds strong legs, and battling builds strong teams!", "Show me what yours can do!"]
+const HIKER_AFTER := ["What a battle! The view's even better after a good workout.",
+	"See the tent by the pond? Someone from the lab camps out there to study the wildlife."]
+## Fully opaque part of each sprite, relative to the object's origin (its feet / base).
+const TREE_SOLID := Rect2(-14, -34, 28, 35)
+const TENT_SOLID := Rect2(-15, -26, 31, 26)
+
+
+func young_trainer_flag() -> StringName:
+	return TrainerData.defeated_flag_for(&"young_trainer")
+
+
+func hiker_flag() -> StringName:
+	return TrainerData.defeated_flag_for(&"hiker")
+
+
+## True if the player's sprite overlaps `solid` (in world coordinates) by more than half a pixel.
+func overlap_with(solid: Rect2) -> bool:
+	var both := sprite_box(player.global_position).intersection(solid)
+	return both.size.x > 0.5 and both.size.y > 0.5
+
+
+## Walks into an object from `origin + start`, then checks the player stopped `expected_gap` px from
+## `origin` on the approach axis without their sprite overlapping `solid` (the object's opaque
+## pixels, world coordinates), and can walk away again.
+func approach(label: String, origin: Vector2, solid: Rect2, start: Vector2, toward: StringName,
+		away: StringName, expected_gap: float) -> void:
+	var facing: Vector2 = {&"move_up": Vector2.UP, &"move_down": Vector2.DOWN, &"move_left": Vector2.LEFT,
+			&"move_right": Vector2.RIGHT}[toward]
+	await place(origin + start, facing)
+	# The longest walk here is 37 px: 0.7 s at walking speed covers it with room to spare.
+	await hold(toward, 0.7)
+	var offset := player.global_position - origin
+	var gap := absf(offset.y) if start.x == 0.0 else absf(offset.x)
+	check(absf(gap - expected_gap) <= 1.0 and not overlap_with(solid),
+			"%s: stops touching it (%.1f px, expected %.0f), no sprite overlap" % [label, gap, expected_gap])
+	var stopped := player.global_position
+	await hold(away, 0.25)
+	check(player.global_position.distance_to(stopped) > 10.0, "%s: can walk away again (not trapped)" % label)
+
+
+func test_trainer_data() -> void:
+	section("Phase 13 · Trainer data + registry")
+	var young := TrainerCatalog.get_trainer(&"young_trainer")
+	var hiker := TrainerCatalog.get_trainer(&"hiker")
+	check(TrainerCatalog.load_problems.is_empty() and TrainerCatalog.get_all_trainers().size() == 2 and young and hiker,
+			"two trainers registered from data/trainers/, no problems")
+	check(young.display_name == "Rory" and young.trainer_class == "Young Trainer" and young.get_title() == "Young Trainer Rory"
+			and young.reward_coins == 100 and young.team.size() == 1 and young.team[0].species_id == &"pebblit"
+			and young.team[0].level == 4 and young.team[0].move_ids == [&"tackle", &"quick_jab"],
+			"Young Trainer Rory: Pebblit Lv. 4 (Tackle, Quick Jab), 100 Coins")
+	check(hiker.get_title() == "Hiker Bram" and hiker.reward_coins == 150 and hiker.team.size() == 2
+			and hiker.team[0].species_id == &"mossaur" and hiker.team[0].level == 5
+			and hiker.team[1].species_id == &"rivulet" and hiker.team[1].level == 5, "Hiker Bram: Mossaur Lv. 5, Rivulet Lv. 5, 150 Coins")
+	check(young.dialogue_before.lines.size() == 2 and young.dialogue_after.lines.size() == 2
+			and hiker.dialogue_before and hiker.dialogue_after, "each trainer has before- and after-battle dialogue")
+	check(young.get_defeated_flag() == &"trainer_young_trainer_defeated" and hiker.get_defeated_flag() == &"trainer_hiker_defeated",
+			"defeated flags come from the trainer id")
+	var fresh := GameState.to_save_data()
+	GameState.load_save_data({"starter_selected": true, "starter_species": "flamkit"})
+	check(not young.is_defeated() and not hiker.is_defeated(), "a save without trainer flags: nobody defeated")
+	GameState.load_save_data(fresh)
+
+	var made := CreatureFactory.create_from_trainer(young.team[0])
+	var again := CreatureFactory.create_from_trainer(young.team[0])
+	check(made.species_id == &"pebblit" and made.level == 4 and made.move_ids == [&"tackle", &"quick_jab"]
+			and made.current_hp == made.get_max_hp() and made.uid.is_empty() and made.get_display_name() == "Pebblit",
+			"create_from_trainer: species, level, listed moves, full HP, no owned UID, species name")
+	made.current_hp = 1
+	check(again.current_hp == again.get_max_hp() and made != again, "each battle gets its own temporary creatures")
+	var named := TrainerCreature.new()
+	named.species_id = &"rivulet"
+	named.level = 3
+	named.nickname = "Splashy"
+	var from_species := CreatureFactory.create_from_trainer(named)
+	check(from_species.get_display_name() == "Splashy" and from_species.species_id == &"rivulet"
+			and from_species.move_ids == [&"tackle", &"splash", &"quick_jab"], "a nickname is shown; no moves listed = species moves")
+
+	var bad := {
+		"no id": func(t: TrainerData) -> void: t.id = &"",
+		"no name": func(t: TrainerData) -> void: t.display_name = "",
+		"no class": func(t: TrainerData) -> void: t.trainer_class = " ",
+		"an empty team": func(t: TrainerData) -> void: t.team.clear(),
+		"an unknown species": func(t: TrainerData) -> void: t.team[0].species_id = &"nonexistent",
+		"an unknown move": func(t: TrainerData) -> void: t.team[0].move_ids = [&"teleport"],
+		"level 0": func(t: TrainerData) -> void: t.team[0].level = 0,
+		"level 101": func(t: TrainerData) -> void: t.team[0].level = 101,
+		"five moves": func(t: TrainerData) -> void: t.team[0].move_ids = [&"tackle", &"tackle", &"tackle", &"tackle", &"tackle"],
+		"a negative reward": func(t: TrainerData) -> void: t.reward_coins = -1,
+		"no after-battle dialogue": func(t: TrainerData) -> void: t.dialogue_after = null,
+	}
+	for label: String in bad:
+		var broken := young.duplicate(true) as TrainerData
+		broken.id = &"broken_trainer"
+		(bad[label] as Callable).call(broken)
+		check(not TrainerCatalog.validate_trainer(broken).is_empty() and not TrainerCatalog.try_register(broken).is_empty()
+				and TrainerCatalog.get_trainer(broken.id) == null, "a trainer with %s is rejected" % label)
+	var duplicate := young.duplicate(true) as TrainerData
+	duplicate.display_name = "Impostor"
+	check(TrainerCatalog.try_register(duplicate).has("duplicate trainer id 'young_trainer'.")
+			and TrainerCatalog.get_trainer(&"young_trainer") == young, "a duplicate id is rejected; the original stays")
+	var invalid := young.duplicate(true) as TrainerData
+	invalid.team.clear()
+	check(not BattleManager.start_trainer_battle(invalid) and not BattleManager.is_active(), "an invalid trainer never starts a battle")
+
+
+func test_trainer_young() -> void:
+	section("Phase 13 · Losing to a trainer")
+	var stash := stash_roster()
+	if world.current_map.map_id != &"route_01":
+		SceneRouter.go_to("res://scenes/world/maps/route_01.tscn", &"south_entrance")
+		await wait_for_map(&"route_01")
+	var scene := battle_scene()
+	var trainer := npc(&"YoungTrainer")
+	var weak := make_creature(&"thornling", 2)
+	set_roster([weak])
+	var coins := GameSession.wallet.get_coins()
+	var orbs := GameSession.inventory.get_quantity(&"capture_orb")
+	check(trainer.is_undefeated_trainer() and not GameState.get_flag(young_trainer_flag(), false), "the Young Trainer is unbeaten (shows '!')")
+	await place(trainer.global_position + Vector2(16, 0), Vector2.LEFT)
+	var spot := player.global_position
+	await press(&"interact")
+	check(trainer.facing.is_equal_approx(Vector2.RIGHT), "the trainer turns to face the player")
+	await expect_lines("Young Trainer", YOUNG_TRAINER_BEFORE, "Challenge")
+	check(await wait_for_ui(BattleScene.UiState.ACTION_MENU) and BattleManager.battle.is_trainer_battle(), "the battle starts after the dialogue")
+	var outcome := [&""]
+	BattleManager.battle_finished.connect(func(b: BattleContext) -> void: outcome[0] = b.outcome, CONNECT_ONE_SHOT)
+	BattleManager.forced_turn_order = -1
+	BattleManager.force_hit = true
+	BattleManager.forced_damage = 999
+	await fight_with_first_move()
+	check(await wait_battle_over() and outcome[0] == BattleContext.OUTCOME_DEFEAT and weak.current_hp == 0,
+			"the player's only creature faints: outcome 'defeat' (the player lost)")
+	check(scene.message_log.has(BattleMessages.NO_USABLE_CREATURES) and not scene.message_log.has("You defeated Young Trainer Rory!"),
+			"existing defeat messages; no trainer-defeated message")
+	check(GameSession.wallet.get_coins() == coins and GameSession.inventory.get_quantity(&"capture_orb") == orbs
+			and not GameState.get_flag(young_trainer_flag(), false), "no reward, Coins and items unchanged, not marked defeated")
+	check(world.current_map.map_id == &"route_01" and player.global_position == spot and last_save_reason == &"battle_defeat",
+			"same Phase 8 defeat behaviour: same spot, autosaved")
+	BattleManager.reset_test_overrides()
+	await press(&"interact")
+	check(DialogueManager.is_active() and box_text() == "I've heard creatures are especially active in tall grass.",
+			"with nobody able to fight, he just chats")
+	await close_dialogue()
+	await frames(5)
+	check(not BattleManager.is_active(), "and no battle starts")
+
+	section("Phase 13 · Beating the Young Trainer")
+	var flam := make_creature(&"flamkit", 8)
+	var moss := make_creature(&"mossaur", 6)
+	set_roster([flam, moss])
+	coins = GameSession.wallet.get_coins()
+	check(GameSession.save_now(&"manual") and int(saved_save()["currency"]) == coins
+			and saved_save()["game_state"].get(String(young_trainer_flag()), false) == false, "saved before the battle: pre-battle state")
+	await press(&"interact")
+	await expect_lines("Young Trainer", YOUNG_TRAINER_BEFORE, "Rematch after losing")
+	check(await wait_for_ui(BattleScene.UiState.ACTION_MENU), "he can be battled again")
+	var battle := BattleManager.battle
+	var team_creature := battle.wild
+	check(battle.source == BattleContext.SOURCE_TRAINER and battle.encounter == null and battle.trainer.id == &"young_trainer"
+			and battle.trainer_team.size() == 1 and team_creature.species_id == &"pebblit" and team_creature.level == 4
+			and team_creature.move_ids == [&"tackle", &"quick_jab"], "trainer battle: Rory's Pebblit Lv. 4 from TrainerData")
+	check(not PartyManager.get_party().has(team_creature) and not GameSession.storage.get_all().has(team_creature)
+			and team_creature.uid.is_empty(), "the trainer's creature is in neither party nor storage, with no owned UID")
+	check(scene.message_log.has("Young Trainer Rory challenges you!") and scene.message_log.has("Young Trainer Rory sent out Pebblit!")
+			and scene.message_log.has("Go, Flamkit!"), "intro: challenge, send-out, the player's creature")
+	check(scene.get_enemy_name() == "Pebblit" and scene.get_opponent_text() == "Young Trainer Rory  1/1",
+			"enemy panel: species name (no 'Wild'); trainer shown above it")
+	check(not player.controls_enabled and not GameSession.can_save() and not GameSession.save_now(&"manual"),
+			"player frozen; no saving mid-battle")
+	await shot("38_trainer_battle")
+
+	var turn := battle.turn
+	var rng_state := BattleManager.rng.state
+	await mouse_click(scene.get_node("%RunOption"))
+	check(scene.message_log[-1] == "You can't run from a Trainer battle!" and scene.ui_state == BattleScene.UiState.ACTION_MENU
+			and BattleManager.state == BattleManager.State.PLAYER_ACTION and battle.turn == turn
+			and BattleManager.rng.state == rng_state and battle.failed_escapes == 0, "RUN refused: no roll, no turn, still choosing")
+	await mouse_click(scene.get_node("%ItemOption"))
+	check(scene.ui_state == BattleScene.UiState.ITEM_MENU and scene.get_creature_rows()[0] == "Capture Orb x%d" % orbs,
+			"ITEM still lists the Capture Orb")
+	await mouse_click(scene.get_node("%OverlayList").get_child(0))
+	check(scene.get_overlay_footer() == "You can't capture another Trainer's creature." and scene.ui_state == BattleScene.UiState.ITEM_MENU
+			and GameSession.inventory.get_quantity(&"capture_orb") == orbs and battle.turn == turn
+			and BattleManager.get_item_problem(&"capture_orb") == BattleMessages.CANT_CAPTURE_TRAINER,
+			"Capture Orb refused (BattleManager rule): not used up, no turn, back in the item menu")
+	await press(&"ui_cancel")
+	BattleManager.force_hit = true
+	BattleManager.forced_damage = 1
+	var log_start := scene.message_log.size()
+	await mouse_click(scene.get_node("%CreatureOption"))
+	await mouse_click(scene.get_node("%OverlayList").get_child(1))
+	check(await wait_for_ui(BattleScene.UiState.ACTION_MENU) and battle.player == moss and battle.turn == turn + 1,
+			"CREATURE: switching works and uses the turn")
+	var trainer_moves := Array(scene.message_log.slice(log_start)).filter(func(line: String) -> bool: return line.begins_with("Pebblit used "))
+	check(trainer_moves.size() == 1 and (trainer_moves[0] == "Pebblit used Tackle!" or trainer_moves[0] == "Pebblit used Quick Jab!"),
+			"the trainer's AI picks one of its creature's own moves (%s)" % trainer_moves)
+
+	var won := [0]
+	var count_wins := func(_b: BattleContext) -> void: won[0] += 1
+	BattleManager.battle_won.connect(count_wins)
+	BattleManager.battle_finished.connect(func(b: BattleContext) -> void: outcome[0] = b.outcome, CONNECT_ONE_SHOT)
+	var saved_mid := [false]
+	var save_watch := func(_reason: StringName) -> void: saved_mid[0] = saved_mid[0] or BattleManager.is_active()
+	GameSession.game_saved.connect(save_watch)
+	BattleManager.forced_turn_order = 1
+	BattleManager.forced_damage = 999
+	log_start = scene.message_log.size()
+	var exp_before := moss.experience
+	await fight_with_first_move()
+	check(await wait_battle_over(), "the trainer's last creature faints: battle over")
+	var lines := scene.message_log.slice(log_start)
+	var order := ["Pebblit fainted!", "Mossaur gained 40 EXP!", "You defeated Young Trainer Rory!", "You received 100 Coins!"]
+	check(order.all(func(l: String) -> bool: return lines.has(l)) and lines.find(order[0]) < lines.find(order[2])
+			and lines.find(order[2]) < lines.find(order[3]), "faint -> EXP -> 'You defeated Young Trainer Rory!' -> 'You received 100 Coins!'")
+	check(outcome[0] == BattleContext.OUTCOME_TRAINER_DEFEATED, "outcome 'trainer_defeated' (the trainer lost)")
+	check(GameSession.wallet.get_coins() == coins + 100 and won[0] == 1 and moss.experience > exp_before,
+			"+100 Coins exactly once (the shared Wallet); EXP for the creature that fought")
+	check(GameState.get_flag(young_trainer_flag(), false) == true and not trainer.is_undefeated_trainer(),
+			"marked defeated (GameState flag); the '!' is gone")
+	check(last_save_reason == &"battle_trainer_defeated" and not saved_mid[0] and int(saved_save()["currency"]) == coins + 100
+			and saved_save()["game_state"][String(young_trainer_flag())] == true, "autosaved after the battle closed, with the reward and the flag")
+	check(party_names() == ["Flamkit", "Mossaur"] and GameSession.storage.get_count() == 0, "the trainer's creature went nowhere")
+	GameSession.game_saved.disconnect(save_watch)
+	BattleManager.battle_won.disconnect(count_wins)
+	BattleManager.reset_test_overrides()
+	var saves_before := saves
+	await press(&"interact")
+	await expect_lines("Young Trainer", YOUNG_TRAINER_AFTER, "After the battle")
+	await frames(5)
+	check(not BattleManager.is_active() and GameSession.wallet.get_coins() == coins + 100 and saves == saves_before,
+			"talking again: after-battle lines, no second battle or reward")
+	restore_roster(stash)
+
+
+func test_trainer_hiker() -> void:
+	section("Phase 13 · Hiker: two creatures in order")
+	var stash := stash_roster()
+	var scene := battle_scene()
+	var flam := make_creature(&"flamkit", 8)
+	set_roster([flam])
+	var coins := GameSession.wallet.get_coins()
+	var hiker := npc(&"Hiker")
+	await place(hiker.global_position + Vector2(0, TALK_GAP), Vector2.UP)
+	await press(&"interact")
+	await expect_lines("Hiker", HIKER_BEFORE, "Hiker challenge")
+	check(await wait_for_ui(BattleScene.UiState.ACTION_MENU) and BattleManager.battle.wild.species_id == &"mossaur"
+			and scene.get_opponent_text() == "Hiker Bram  2/2", "Hiker Bram sends out Mossaur first (2/2)")
+	var won := [0]
+	var count_wins := func(_b: BattleContext) -> void: won[0] += 1
+	BattleManager.battle_won.connect(count_wins)
+	BattleManager.forced_turn_order = 1
+	BattleManager.force_hit = true
+	BattleManager.forced_damage = 999
+	var log_start := scene.message_log.size()
+	await fight_with_first_move()
+	check(await wait_for_ui(BattleScene.UiState.ACTION_MENU) and BattleManager.is_active()
+			and BattleManager.battle.wild.species_id == &"rivulet" and scene.get_enemy_name() == "Rivulet"
+			and scene.get_opponent_text() == "Hiker Bram  1/2", "Mossaur faints; Rivulet comes out next (1/2)")
+	var lines := scene.message_log.slice(log_start)
+	check(lines.find("Mossaur fainted!") >= 0 and lines.find("Mossaur fainted!") < lines.find("Hiker Bram sent out Rivulet!")
+			and won[0] == 0 and GameSession.wallet.get_coins() == coins and not GameState.get_flag(hiker_flag(), false),
+			"no reward or win yet")
+	BattleManager.forced_turn_order = -1
+	BattleManager.forced_damage = 1
+	log_start = scene.message_log.size()
+	await fight_with_first_move()
+	check(await wait_for_ui(BattleScene.UiState.ACTION_MENU), "Rivulet attacks first this turn")
+	lines = scene.message_log.slice(log_start)
+	check(lines[0] == "Rivulet used Tackle!" or lines[0] == "Rivulet used Splash!", "the trainer's next creature fights (%s)" % lines[0])
+	BattleManager.forced_turn_order = 1
+	BattleManager.forced_damage = 999
+	log_start = scene.message_log.size()
+	await fight_with_first_move()
+	check(await wait_battle_over(), "Rivulet faints: the Hiker loses")
+	lines = scene.message_log.slice(log_start)
+	check(lines.has("You defeated Hiker Bram!") and lines.has("You received 150 Coins!") and won[0] == 1
+			and GameSession.wallet.get_coins() == coins + 150, "+150 Coins, exactly once")
+	check(GameState.get_flag(hiker_flag(), false) == true and last_save_reason == &"battle_trainer_defeated"
+			and int(saved_save()["currency"]) == coins + 150, "flag set and saved")
+	BattleManager.battle_won.disconnect(count_wins)
+	BattleManager.reset_test_overrides()
+	await press(&"interact")
+	await expect_lines("Hiker", HIKER_AFTER, "Hiker after")
+	await frames(5)
+	check(not BattleManager.is_active() and GameSession.wallet.get_coins() == coins + 150, "no rematch, no second reward")
+	restore_roster(stash)
+
+
+func test_wild_battles_unchanged() -> void:
+	section("Phase 13 · Wild battles keep every action")
+	var stash := stash_roster()
+	var scene := battle_scene()
+	set_roster([make_creature(&"flamkit", 8)])
+	GameSession.inventory.add_item(&"capture_orb", 1)
+	await place(Vector2(470, 536), Vector2.RIGHT)
+	EncounterManager.force_next_encounter_species(&"pebblit", 3)
+	await hold(&"move_right", 0.25)
+	check(await wait_for_ui(BattleScene.UiState.ACTION_MENU) and BattleManager.battle.source == BattleContext.SOURCE_WILD
+			and not BattleManager.battle.is_trainer_battle(), "wild battle")
+	check(scene.get_enemy_name() == "Wild Pebblit" and scene.get_opponent_text() == ""
+			and BattleManager.get_run_problem() == "" and BattleManager.get_item_problem(&"capture_orb") == "",
+			"'Wild Pebblit', no trainer label; RUN and Capture Orb allowed")
+	var orbs := GameSession.inventory.get_quantity(&"capture_orb")
+	BattleManager.forced_capture = 1
+	await mouse_click(scene.get_node("%ItemOption"))
+	await press(&"ui_accept")
+	check(await wait_battle_over() and GameSession.inventory.get_quantity(&"capture_orb") == orbs - 1 and PartyManager.get_size() == 2,
+			"the Capture Orb still catches wild creatures")
+	EncounterManager.force_next_encounter_species(&"pebblit", 3)
+	await hold(&"move_left", 0.25)
+	check(await wait_for_ui(BattleScene.UiState.ACTION_MENU), "another wild battle")
+	BattleManager.forced_escape = 1
+	await mouse_click(scene.get_node("%RunOption"))
+	check(await wait_battle_over() and last_save_reason == &"battle_escaped", "RUN still works")
+	BattleManager.reset_test_overrides()
+	restore_roster(stash)
+
+
+func test_object_collision() -> void:
+	section("Phase 13 · Object collision (trees, tent, buildings)")
+	if world.current_map.map_id != &"route_01":
+		SceneRouter.go_to("res://scenes/world/maps/route_01.tscn", &"south_entrance")
+		await wait_for_map(&"route_01")
+	var tree := world.current_map.get_node("Objects/Trees/Tree4") as Node2D
+	var at := tree.global_position
+	var tree_solid := Rect2(TREE_SOLID.position + at, TREE_SOLID.size)
+	await approach("tree from below", at, tree_solid, Vector2(0, 51), &"move_up", &"move_down", 20)
+	await approach("tree from above", at, tree_solid, Vector2(0, -54), &"move_down", &"move_up", 37)
+	await approach("tree from the left", at, tree_solid, Vector2(-44, 0), &"move_right", &"move_left", 19)
+	await approach("tree from the right", at, tree_solid, Vector2(46, 0), &"move_left", &"move_right", 19)
+	var tent := world.current_map.get_node("Objects/FieldCamp/Tent") as Node2D
+	var tent_solid := Rect2(TENT_SOLID.position + tent.global_position, TENT_SOLID.size)
+	await approach("tent from below", tent.global_position, tent_solid, Vector2(0, 44), &"move_up", &"move_down", 19)
+	await approach("tent from the right", tent.global_position, tent_solid, Vector2(42, 0), &"move_left", &"move_right", 21)
+	await place(tent.global_position + Vector2(0, 44), Vector2.UP)
+	await hold(&"move_up", 1.0)
+	check(player.global_position.y > tent.global_position.y, "the tent can't be walked through")
+
+	SceneRouter.go_to("res://scenes/world/maps/fernhollow_town.tscn", &"player_home_front")
+	await wait_for_map(&"fernhollow_town")
+	var house := world.current_map.get_node("Objects/Buildings/PlayerHouse") as Building
+	var size := Vector2(house.size_tiles * Building.TILE)
+	var base := house.global_position
+	# What's drawn: walls plus a roof that hangs 2 px past them, from the base up to the roof top.
+	var house_solid := Rect2(base + Vector2(-size.x / 2.0 - 2.0, -size.y), Vector2(size.x + 4.0, size.y))
+	await approach("house wall from below", base + Vector2(-30, 0), house_solid, Vector2(0, 40), &"move_up", &"move_down", 19)
+	await approach("house from the left", Vector2(base.x - size.x / 2.0, base.y - 30), house_solid, Vector2(-26, 0),
+			&"move_right", &"move_left", 7)
+	await approach("house from above (behind)", Vector2(base.x, base.y - size.y), house_solid, Vector2(0, -40),
+			&"move_down", &"move_up", 3)
+	await place(base + Vector2(0, 40), Vector2.UP)
+	await hold(&"move_up", 1.0)
+	check(interaction.target == house.get_node("DoorInteractable") and player.global_position.y - base.y < 9,
+			"the doorway stays open: the player reaches the door")
+	await press(&"interact")
+	check(await wait_for_map(&"player_house"), "and E still enters the house")
+	SceneRouter.go_to("res://scenes/world/maps/fernhollow_town.tscn", &"player_home_front")
+	await wait_for_map(&"fernhollow_town")
+	var lab := world.current_map.get_node("Objects/Buildings/ResearchLab") as Building
+	await place(lab.global_position + Vector2(0, 30), Vector2.UP)
+	await hold(&"move_up", 1.0)
+	check(await wait_for_map(&"research_lab"), "the lab's walk-in door still works")
+	SceneRouter.go_to("res://scenes/world/maps/fernhollow_town.tscn", &"player_home_front")
+	await wait_for_map(&"fernhollow_town")
+	var lab_sign := world.current_map.get_node("Objects/Signs/LabSign") as SignPost
+	await place(lab_sign.global_position + Vector2(0, 14), Vector2.UP)
+	await press(&"interact")
+	check(DialogueManager.is_active() and dialogue_box.visible, "the sign next to the lab is still readable")
+	await close_dialogue()
+	var mira := npc(&"Mira")
+	await place(mira.global_position + Vector2(0, 48), Vector2.UP)
+	await hold(&"move_up", 1.0)
+	check(not sprites_overlap(player.global_position, mira.global_position) and interaction.target == interactable_of(mira),
+			"NPCs: still no overlap, still in reach")
+
+
+func test_save_notice_placement() -> void:
+	section("Phase 13 · 'Game saved.' never covers the Coins")
+	var stash := stash_roster()
+	var notice := main.get_node("SaveNotice") as SaveNotice
+	check(GameSession.save_now(&"manual") and notice.get_corner() == SaveNotice.TOP_RIGHT and notice.is_showing(),
+			"while exploring: top-right, as before")
+	set_roster([make_creature(&"flamkit", 5), make_creature(&"pebblit", 4)])
+	var pause := main.get_node("PauseMenu") as PauseMenu
+	await press(&"ui_cancel")
+	await press(&"ui_down")
+	await press(&"ui_accept")
+	var screen := pause.get_party_screen()
+	var coins_label := screen.find_child("Coins", true, false) as Control
+	await press(&"ui_down")
+	await press(&"ui_accept")
+	await press(&"ui_down")
+	await press(&"ui_accept")
+	await frames(2)
+	check(last_save_reason == &"lead_changed" and notice.is_showing() and notice.get_corner() != SaveNotice.TOP_RIGHT
+			and not notice.get_rect().intersects(coins_label.get_global_rect()), "party screen: the notice moves off the Coins label")
+	await shot("39_notice_party_screen")
+	await press(&"ui_cancel")
+	await press(&"ui_cancel")
+	SceneRouter.go_to("res://scenes/world/maps/fernhollow_town.tscn", &"player_home_front")
+	await wait_for_map(&"fernhollow_town")
+	var counter := world.current_map.get_node("Objects/Market") as ShopCounter
+	GameSession.wallet.load_save_data(500)
+	await place(counter.global_position + Vector2(0, 10), Vector2.UP)
+	await press(&"interact")
+	await press(&"ui_accept")
+	await press(&"ui_accept")
+	await frames(2)
+	var shop_coins := counter.get_screen().find_child("Coins", true, false) as Control
+	check(last_save_reason == &"purchase" and notice.is_showing() and not notice.get_rect().intersects(shop_coins.get_global_rect()),
+			"shop: the notice doesn't cover the Coins either")
+	await press(&"ui_cancel")
+	notice.dismiss()
+	restore_roster(stash)
+	SceneRouter.go_to("res://scenes/world/maps/route_01.tscn", &"south_entrance")
+	await wait_for_map(&"route_01")
+
+
+# --- Phase 13: relaunch stages --------------------------------------------------------------
+
+func test_trainer_start() -> void:
+	section("Phase 13 trainer chain: New Game -> starter -> beat the Young Trainer -> quit")
+	await new_game_from_title()
+	check(GameSession.wallet.get_coins() == 500 and not GameState.get_flag(young_trainer_flag(), false), "New Game: 500 Coins, no trainer beaten")
+	await choose_flamkit()
+	SceneRouter.go_to("res://scenes/world/maps/route_01.tscn", &"south_entrance")
+	await wait_for_map(&"route_01")
+	var trainer := npc(&"YoungTrainer")
+	await place(trainer.global_position + Vector2(16, 0), Vector2.LEFT)
+	await press(&"interact")
+	await expect_lines("Young Trainer", YOUNG_TRAINER_BEFORE, "Challenge")
+	check(await wait_for_ui(BattleScene.UiState.ACTION_MENU) and BattleManager.battle.is_trainer_battle(), "trainer battle")
+	BattleManager.forced_turn_order = 1
+	BattleManager.force_hit = true
+	BattleManager.forced_damage = 999
+	await fight_with_first_move()
+	check(await wait_battle_over() and GameSession.wallet.get_coins() == 600 and GameState.get_flag(young_trainer_flag(), false) == true,
+			"won: 600 Coins, marked defeated")
+	check(last_save_reason == &"battle_trainer_defeated" and int(saved_save()["currency"]) == 600, "autosaved with the reward")
+	BattleManager.reset_test_overrides()
+	write_expectation()
+
+
+func test_trainer_continue() -> void:
+	section("Phase 13 trainer chain: relaunch -> Continue -> no rematch -> beat the Hiker -> quit")
+	await press(&"ui_accept")
+	check(await wait_for_state(GameSession.State.PLAYING), "Continue")
+	await frames(3)
+	verify_expectation()
+	check(GameSession.wallet.get_coins() == 600 and GameState.get_flag(young_trainer_flag(), false) == true,
+			"600 Coins and the Young Trainer still beaten")
+	var trainer := npc(&"YoungTrainer")
+	check(not trainer.is_undefeated_trainer(), "no '!' over him")
+	await place(trainer.global_position + Vector2(16, 0), Vector2.LEFT)
+	await press(&"interact")
+	await expect_lines("Young Trainer", YOUNG_TRAINER_AFTER, "After the battle")
+	await frames(5)
+	check(not BattleManager.is_active() and GameSession.wallet.get_coins() == 600, "no second battle, no second reward")
+	var hiker := npc(&"Hiker")
+	await place(hiker.global_position + Vector2(0, TALK_GAP), Vector2.UP)
+	await press(&"interact")
+	await expect_lines("Hiker", HIKER_BEFORE, "Hiker challenge")
+	check(await wait_for_ui(BattleScene.UiState.ACTION_MENU) and BattleManager.battle.wild.species_id == &"mossaur", "Hiker: Mossaur")
+	BattleManager.forced_turn_order = 1
+	BattleManager.force_hit = true
+	BattleManager.forced_damage = 999
+	await fight_with_first_move()
+	check(await wait_for_ui(BattleScene.UiState.ACTION_MENU) and BattleManager.battle.wild.species_id == &"rivulet",
+			"Mossaur fainted; Rivulet enters")
+	await fight_with_first_move()
+	check(await wait_battle_over() and GameSession.wallet.get_coins() == 750 and GameState.get_flag(hiker_flag(), false) == true
+			and last_save_reason == &"battle_trainer_defeated", "won: 750 Coins (100 + 150 earned); autosaved")
+	BattleManager.reset_test_overrides()
+	write_expectation()
+
+
+func test_trainer_verify() -> void:
+	section("Phase 13 trainer chain: relaunch -> Continue -> exact state")
+	await press(&"ui_accept")
+	check(await wait_for_state(GameSession.State.PLAYING), "Continue")
+	await frames(3)
+	verify_expectation()
+	check(GameSession.wallet.get_coins() == 750 and GameState.get_flag(young_trainer_flag(), false) == true
+			and GameState.get_flag(hiker_flag(), false) == true and int(saved_save()["version"]) == 3,
+			"750 Coins, both trainers beaten, still save version 3")
+	var hiker := npc(&"Hiker")
+	await place(hiker.global_position + Vector2(0, TALK_GAP), Vector2.UP)
+	await press(&"interact")
+	await expect_lines("Hiker", HIKER_AFTER, "Hiker after")
+	await frames(5)
+	check(not BattleManager.is_active(), "no rematch")
+
+
 # --- Phase 1-3 regression -------------------------------------------------------------------
 
 func test_world_and_collision() -> void:
@@ -3220,6 +3739,8 @@ func test_world_and_collision() -> void:
 	await hold(&"move_up", 1.0)
 	check(player.global_position.y > 160 and world.current_map.map_id == &"fernhollow_town",
 			"house wall blocks, walking into an E-only door does not enter (y=%.1f)" % player.global_position.y)
+	# Phase 13: start outside the doorway (the wall's collision now reaches in front of it).
+	await place(TOWN_SPAWN, Vector2.DOWN)
 	var p0 := player.global_position
 	Input.action_press(&"move_down"); Input.action_press(&"move_right")
 	await frames(30)

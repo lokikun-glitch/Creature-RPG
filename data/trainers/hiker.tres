@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="TrainerData" load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/trainers/trainer_data.gd" id="1_trainer"]
+[ext_resource type="Script" path="res://scripts/trainers/trainer_creature.gd" id="2_member"]
+[ext_resource type="Resource" path="res://data/dialogue/trainer_hiker_before.tres" id="3_before"]
+[ext_resource type="Resource" path="res://data/dialogue/trainer_hiker_after.tres" id="4_after"]
+
+[sub_resource type="Resource" id="Resource_member1"]
+script = ExtResource("2_member")
+species_id = &"mossaur"
+level = 5
+move_ids = Array[StringName]([&"tackle", &"vine_whip"])
+
+[sub_resource type="Resource" id="Resource_member2"]
+script = ExtResource("2_member")
+species_id = &"rivulet"
+level = 5
+move_ids = Array[StringName]([&"tackle", &"splash"])
+
+[resource]
+script = ExtResource("1_trainer")
+id = &"hiker"
+display_name = "Bram"
+trainer_class = "Hiker"
+dialogue_before = ExtResource("3_before")
+dialogue_after = ExtResource("4_after")
+team = Array[ExtResource("2_member")]([SubResource("Resource_member1"), SubResource("Resource_member2")])
+reward_coins = 150

@@ -31,6 +31,12 @@ const SENT_TO_STORAGE := "{name} was sent to storage."
 const SWITCH_REQUIRED := "Choose a creature to send out."
 const OUT_OF_ITEM := "Out of {item}s."
 const CANT_CATCH := "It can't be caught right now."
+const TRAINER_CHALLENGE := "{trainer} challenges you!"
+const TRAINER_SENT_OUT := "{trainer} sent out {name}!"
+const TRAINER_DEFEATED := "You defeated {trainer}!"
+const REWARD := "You received {amount} Coins!"
+const CANT_CAPTURE_TRAINER := "You can't capture another Trainer's creature."
+const CANT_RUN_TRAINER := "You can't run from a Trainer battle!"
 const FAINTED_TAG := "Fainted"
 const ACTIVE_TAG := "Active"
 
@@ -45,7 +51,8 @@ static func effectiveness_label(multiplier: float) -> String:
 
 
 static func describe(event: BattleEvent, battle: BattleContext) -> PackedStringArray:
-	var who := battle.display_name(event.side)
+	var who := battle.name_of(event.creature, event.side) if event.creature else battle.display_name(event.side)
+	var trainer := battle.trainer.get_title() if battle.trainer else ""
 	match event.type:
 		BattleEvent.Type.MOVE_USED:
 			var move := CreatureDatabase.get_move(event.move_id)
@@ -78,6 +85,12 @@ static func describe(event: BattleEvent, battle: BattleContext) -> PackedStringA
 			return [RECALLED.format({"name": event.creature.get_display_name()})]
 		BattleEvent.Type.SENT_OUT:
 			return [SEND_OUT.format({"name": event.creature.get_display_name()})]
+		BattleEvent.Type.TRAINER_SENT_OUT:
+			return [TRAINER_SENT_OUT.format({"trainer": trainer, "name": event.creature.get_display_name()})]
+		BattleEvent.Type.TRAINER_DEFEATED:
+			return [TRAINER_DEFEATED.format({"trainer": trainer})]
+		BattleEvent.Type.REWARD:
+			return [REWARD.format({"amount": event.amount})]
 		BattleEvent.Type.CAPTURE_THROWN:
 			var item := ItemCatalog.get_item(event.move_id)
 			return [CAPTURE_THROWN.format({"item": item.display_name if item else String(event.move_id)})]

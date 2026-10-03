@@ -1,11 +1,14 @@
 extends Node
 ## Autoload that runs battles. Rules only: no UI, no waiting. It starts a battle for every wild
-## encounter, resolves each player action into a list of BattleEvents for the BattleScene to play
-## back, awards EXP, and ends the encounter when the battle is over.
+## encounter and for every trainer challenge (start_trainer_battle), resolves each player action
+## into a list of BattleEvents for the BattleScene to play back, awards EXP and trainer rewards,
+## and ends the encounter when the battle is over. Wild and trainer battles are the same battle;
+## BattleContext.source decides the few rules that differ (no catching or running from trainers,
+## the trainer sends out its next creature, a reward for beating the trainer).
 ##
 ## States: NONE -> INTRO -> PLAYER_ACTION <-> TURN_RESOLUTION
 ##         -> SWITCH_REQUIRED (active creature fainted, others can fight) -> PLAYER_ACTION
-##         -> VICTORY | DEFEAT | ESCAPED | CAUGHT -> NONE
+##         -> VICTORY (wild creature or whole trainer team beaten) | DEFEAT | ESCAPED | CAUGHT -> NONE
 ## Player actions: FIGHT (submit_move), CREATURE (submit_switch), ITEM (submit_item), RUN (submit_run).
 
 signal battle_started(battle: BattleContext)
@@ -30,9 +33,9 @@ var force_hit := false
 var forced_random_factor := -1.0
 ## Exact damage for every hit; negative means calculate it.
 var forced_damage := -1
-## Move the wild creature always uses; empty means BattleAI decides.
+## Move the opposing creature (wild or trainer) always uses; empty means BattleAI decides.
 var forced_ai_move: StringName = &""
-## 1 = player always first, -1 = wild always first, 0 = decide by speed.
+## 1 = player always first, -1 = opponent always first, 0 = decide by speed.
 var forced_turn_order := 0
 ## 1 = running always works, -1 = always fails, 0 = roll the escape chance.
 var forced_escape := 0
@@ -60,6 +63,27 @@ func start_battle(encounter: WildEncounter) -> bool:
 		EncounterManager.end_encounter.call_deferred()
 		return false
 	battle = BattleContext.new(encounter, active)
+	_set_state(State.INTRO)
+	battle_started.emit(battle)
+	return true
+
+
+## True if a trainer battle could start right now: no battle running and a creature that can fight.
+func can_start_trainer_battle() -> bool:
+	return not is_active() and GameSession.state == GameSession.State.PLAYING \
+			and get_first_usable_creature() != null
+
+
+## Starts a battle against `trainer`. Their team is built fresh from the TrainerData templates
+## (temporary creatures, never added to the party, storage or save). Returns false if the trainer
+## is invalid or no battle can start.
+func start_trainer_battle(trainer: TrainerData) -> bool:
+	if trainer == null or not can_start_trainer_battle() or not TrainerCatalog.validate_trainer(trainer).is_empty():
+		return false
+	var team: Array[CreatureInstance] = []
+	for entry in trainer.team:
+		team.append(CreatureFactory.create_from_trainer(entry))
+	battle = BattleContext.for_trainer(trainer, team, PartyManager.ensure_usable_active())
 	_set_state(State.INTRO)
 	battle_started.emit(battle)
 	return true
@@ -97,7 +121,7 @@ func submit_move(move_id: StringName) -> Array[BattleEvent]:
 		return events
 	_set_state(State.TURN_RESOLUTION)
 	battle.turn += 1
-	var actions := {BattleSide.Side.PLAYER: move_id, BattleSide.Side.WILD: _choose_wild_move()}
+	var actions := {BattleSide.Side.PLAYER: move_id, BattleSide.Side.WILD: _choose_opponent_move()}
 	for side in determine_turn_order():
 		_execute_move(side, actions[side], events)
 		if _resolve_faints(events):
@@ -126,16 +150,19 @@ func submit_switch(party_index: int) -> Array[BattleEvent]:
 	sent.creature = battle.player
 	events.append(sent)
 	if not replacing_fainted:
-		_execute_move(BattleSide.Side.WILD, _choose_wild_move(), events)
+		_execute_move(BattleSide.Side.WILD, _choose_opponent_move(), events)
 		_resolve_faints(events)
 	return _finish_turn(events)
 
 
-## Why `item_id` can't be used right now, or "" if it can. Only capture items exist so far.
+## Why `item_id` can't be used right now, or "" if it can. Only capture items exist so far, and
+## they only work on wild creatures: a trainer's creature can't be captured (nothing is used up).
 func get_item_problem(item_id: StringName) -> String:
 	var item := ItemCatalog.get_item(item_id)
 	if state != State.PLAYER_ACTION or item == null or item.category != CAPTURE_CATEGORY:
 		return BattleMessages.CANT_CATCH
+	if battle.is_trainer_battle():
+		return BattleMessages.CANT_CAPTURE_TRAINER
 	if not GameSession.inventory.has_item(item_id):
 		return BattleMessages.OUT_OF_ITEM.format({"item": item.display_name})
 	if battle.wild.current_hp <= 0:
@@ -160,15 +187,25 @@ func submit_item(item_id: StringName) -> Array[BattleEvent]:
 		_catch(events)
 	else:
 		events.append(BattleEvent.new(BattleEvent.Type.CAPTURE_FAILED, BattleSide.Side.WILD))
-		_execute_move(BattleSide.Side.WILD, _choose_wild_move(), events)
+		_execute_move(BattleSide.Side.WILD, _choose_opponent_move(), events)
 		_resolve_faints(events)
 	return _finish_turn(events)
+
+
+## Why running isn't possible right now, or "" if the player may try. There's no running from a
+## trainer: refusing uses no turn and rolls nothing.
+func get_run_problem() -> String:
+	if state != State.PLAYER_ACTION:
+		return BattleMessages.ESCAPE_FAILED
+	if battle.is_trainer_battle():
+		return BattleMessages.CANT_RUN_TRAINER
+	return ""
 
 
 ## Tries to run from a wild battle. Success ends it (no EXP); failure gives the wild creature a free turn.
 func submit_run() -> Array[BattleEvent]:
 	var events: Array[BattleEvent] = []
-	if state != State.PLAYER_ACTION:
+	if not get_run_problem().is_empty():
 		return events
 	_set_state(State.TURN_RESOLUTION)
 	battle.turn += 1
@@ -179,12 +216,12 @@ func submit_run() -> Array[BattleEvent]:
 	else:
 		battle.failed_escapes += 1
 		events.append(BattleEvent.new(BattleEvent.Type.ESCAPE_FAILED, BattleSide.Side.PLAYER))
-		_execute_move(BattleSide.Side.WILD, _choose_wild_move(), events)
+		_execute_move(BattleSide.Side.WILD, _choose_opponent_move(), events)
 		_resolve_faints(events)
 	return _finish_turn(events)
 
 
-## How effective one of the player's moves would be against the wild creature, straight from
+## How effective one of the player's moves would be against the opposing creature, straight from
 ## BattleCalculator, so menus never work out matchups themselves.
 func preview_effectiveness(move_id: StringName) -> float:
 	var move := CreatureDatabase.get_move(move_id)
@@ -259,7 +296,8 @@ func _roll_capture() -> bool:
 	return rng.randf() < get_capture_chance()
 
 
-func _choose_wild_move() -> StringName:
+## Wild creatures and trainers choose the same way for now: a random valid move (BattleAI).
+func _choose_opponent_move() -> StringName:
 	if not forced_ai_move.is_empty():
 		return forced_ai_move
 	return BattleAI.choose_move(battle.wild, rng)
@@ -290,14 +328,18 @@ func _execute_move(side: BattleSide.Side, move_id: StringName, events: Array[Bat
 		return
 	var used := BattleEvent.new(BattleEvent.Type.MOVE_USED, side)
 	used.move_id = move_id
+	used.creature = attacker
 	events.append(used)
 	if not force_hit and not BattleCalculator.roll_hit(move, rng):
-		events.append(BattleEvent.new(BattleEvent.Type.MISSED, side))
+		var missed := BattleEvent.new(BattleEvent.Type.MISSED, side)
+		missed.creature = attacker
+		events.append(missed)
 		return
 	var factor := forced_random_factor if forced_random_factor >= 0.0 else BattleCalculator.roll_random_factor(rng)
 	var result := BattleCalculator.calculate_damage(attacker, defender, move, factor)
 	var damage: int = forced_damage if forced_damage >= 0 else result["damage"]
 	var hit := BattleEvent.new(BattleEvent.Type.DAMAGE, target_side)
+	hit.creature = defender
 	hit.move_id = move_id
 	hit.amount = damage
 	hit.effectiveness = result["effectiveness"]
@@ -310,11 +352,27 @@ func _execute_move(side: BattleSide.Side, move_id: StringName, events: Array[Bat
 ## Returns true if this turn must stop: the battle is over, or a fainted creature must be replaced.
 func _resolve_faints(events: Array[BattleEvent]) -> bool:
 	if battle.wild.current_hp <= 0:
-		events.append(BattleEvent.new(BattleEvent.Type.FAINTED, BattleSide.Side.WILD))
-		_win(events)
+		var fainted := BattleEvent.new(BattleEvent.Type.FAINTED, BattleSide.Side.WILD)
+		fainted.creature = battle.wild
+		events.append(fainted)
+		if not battle.is_trainer_battle():
+			_win(events)
+			return true
+		_award_experience(events)
+		var next := battle.next_trainer_creature()
+		if next:
+			# The trainer sends out the next healthy creature in team order; the turn ends there.
+			battle.wild = next
+			var sent := BattleEvent.new(BattleEvent.Type.TRAINER_SENT_OUT, BattleSide.Side.WILD)
+			sent.creature = next
+			events.append(sent)
+		else:
+			_defeat_trainer(events)
 		return true
 	if battle.player.current_hp <= 0:
-		events.append(BattleEvent.new(BattleEvent.Type.FAINTED, BattleSide.Side.PLAYER))
+		var fainted := BattleEvent.new(BattleEvent.Type.FAINTED, BattleSide.Side.PLAYER)
+		fainted.creature = battle.player
+		events.append(fainted)
 		if get_first_usable_creature() != null:
 			# Losing one creature isn't losing the battle while others can still fight.
 			battle.awaiting_switch = true
@@ -326,10 +384,17 @@ func _resolve_faints(events: Array[BattleEvent]) -> bool:
 	return false
 
 
+## Beat a wild creature.
 func _win(events: Array[BattleEvent]) -> void:
 	_set_state(State.VICTORY)
 	battle.outcome = BattleContext.OUTCOME_VICTORY
 	events.append(BattleEvent.new(BattleEvent.Type.VICTORY, BattleSide.Side.PLAYER))
+	_award_experience(events)
+	battle_won.emit(battle)
+
+
+## EXP for the opposing creature that just fainted (each trainer creature counts, like a wild one).
+func _award_experience(events: Array[BattleEvent]) -> void:
 	var gained := BattleEvent.new(BattleEvent.Type.EXP_GAINED, BattleSide.Side.PLAYER)
 	gained.amount = CreatureProgression.exp_reward(battle.wild.level)
 	events.append(gained)
@@ -337,6 +402,22 @@ func _win(events: Array[BattleEvent]) -> void:
 		var level_up := BattleEvent.new(BattleEvent.Type.LEVEL_UP, BattleSide.Side.PLAYER)
 		level_up.level = new_level
 		events.append(level_up)
+
+
+## Every creature in the trainer's team has fainted: the trainer loses. The reward is paid and the
+## win recorded (GameState flag) right here, once, before the battle closes, so the autosave that
+## follows the battle contains both.
+func _defeat_trainer(events: Array[BattleEvent]) -> void:
+	_set_state(State.VICTORY)
+	battle.outcome = BattleContext.OUTCOME_TRAINER_DEFEATED
+	events.append(BattleEvent.new(BattleEvent.Type.TRAINER_DEFEATED, BattleSide.Side.WILD))
+	battle.reward = battle.trainer.reward_coins
+	if battle.reward > 0:
+		GameSession.wallet.add(battle.reward)
+		var paid := BattleEvent.new(BattleEvent.Type.REWARD, BattleSide.Side.PLAYER)
+		paid.amount = battle.reward
+		events.append(paid)
+	GameState.set_flag(battle.trainer.get_defeated_flag(), true)
 	battle_won.emit(battle)
 
 

@@ -24,14 +24,10 @@ script = ExtResource("1_notice")
 
 [node name="Panel" type="PanelContainer" parent="."]
 unique_name_in_owner = true
-anchors_preset = 1
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -62.0
+offset_left = 258.0
 offset_top = 6.0
-offset_right = -6.0
+offset_right = 314.0
 offset_bottom = 18.0
-grow_horizontal = 0
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_notice")
 

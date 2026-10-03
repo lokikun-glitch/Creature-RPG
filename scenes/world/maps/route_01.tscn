@@ -194,6 +194,7 @@ sprite_sheet = ExtResource("6_villager_b")
 facing = Vector2(-1, 0)
 dialogue = ExtResource("7_route01_young_trainer")
 alternate_dialogue = ExtResource("20_trainer_after")
+trainer_id = &"young_trainer"
 
 [node name="Hiker" parent="Objects/NPCs" instance=ExtResource("8_npc")]
 position = Vector2(680, 220)
@@ -202,6 +203,7 @@ display_name = "Hiker"
 sprite_sheet = ExtResource("9_villager_a")
 facing = Vector2(0, 1)
 dialogue = ExtResource("10_route01_hiker")
+trainer_id = &"hiker"
 
 
 [node name="Researcher" parent="Objects/NPCs" instance=ExtResource("8_npc")]

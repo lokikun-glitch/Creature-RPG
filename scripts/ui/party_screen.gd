@@ -52,6 +52,7 @@ func _ready() -> void:
 	header.add_child(title)
 	_coins = UiStyle.label("", 7, UiStyle.TEXT_DIM)
 	_coins.name = "Coins"
+	_coins.add_to_group(SaveNotice.AVOID_GROUP)
 	header.add_child(_coins)
 	_list = MenuList.new()
 	_list.name = "PartyList"

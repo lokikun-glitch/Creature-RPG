@@ -23,6 +23,9 @@ func _ready() -> void:
 	DialogueManager.dialogue_finished.connect(player.remove_control_lock.bind(&"dialogue").unbind(1))
 	EncounterManager.encounter_started.connect(player.add_control_lock.bind(&"encounter").unbind(1))
 	EncounterManager.encounter_ended.connect(player.remove_control_lock.bind(&"encounter").unbind(1))
+	# Any battle, wild or trainer, freezes the player until it has fully finished.
+	BattleManager.battle_started.connect(player.add_control_lock.bind(&"battle").unbind(1))
+	BattleManager.battle_finished.connect(player.remove_control_lock.bind(&"battle").unbind(1))
 	SaveManager.register_world(self)
 	# The world waits, hidden and frozen, until GameSession starts or continues a game.
 	set_active(false)

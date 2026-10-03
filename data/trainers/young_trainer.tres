@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="TrainerData" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/trainers/trainer_data.gd" id="1_trainer"]
+[ext_resource type="Script" path="res://scripts/trainers/trainer_creature.gd" id="2_member"]
+[ext_resource type="Resource" path="res://data/dialogue/trainer_young_trainer_before.tres" id="3_before"]
+[ext_resource type="Resource" path="res://data/dialogue/trainer_young_trainer_after.tres" id="4_after"]
+
+[sub_resource type="Resource" id="Resource_member1"]
+script = ExtResource("2_member")
+species_id = &"pebblit"
+level = 4
+move_ids = Array[StringName]([&"tackle", &"quick_jab"])
+
+[resource]
+script = ExtResource("1_trainer")
+id = &"young_trainer"
+display_name = "Rory"
+trainer_class = "Young Trainer"
+dialogue_before = ExtResource("3_before")
+dialogue_after = ExtResource("4_after")
+team = Array[ExtResource("2_member")]([SubResource("Resource_member1")])
+reward_coins = 100
