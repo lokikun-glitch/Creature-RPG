@@ -1,0 +1,25 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/storage_terminal.gd" id="1_terminal"]
+[ext_resource type="Texture2D" path="res://assets/sprites/objects/storage_terminal.png" id="2_tex"]
+[ext_resource type="PackedScene" path="res://scenes/interaction/interactable.tscn" id="3_interactable"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_base"]
+size = Vector2(14, 8)
+
+[node name="StorageTerminal" type="StaticBody2D"]
+collision_mask = 0
+script = ExtResource("1_terminal")
+
+[node name="Sprite" type="Sprite2D" parent="."]
+texture = ExtResource("2_tex")
+offset = Vector2(0, -13)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+position = Vector2(0, -4)
+shape = SubResource("RectangleShape2D_base")
+
+[node name="Interactable" parent="." instance=ExtResource("3_interactable")]
+position = Vector2(0, -6)
+interaction_name = "Storage"
+prompt_offset = Vector2(0, -24)

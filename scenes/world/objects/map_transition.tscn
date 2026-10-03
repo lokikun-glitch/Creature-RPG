@@ -1,0 +1,16 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/map_transition.gd" id="1_transition"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_area"]
+resource_local_to_scene = true
+size = Vector2(16, 12)
+
+[node name="MapTransition" type="Area2D"]
+collision_layer = 16
+collision_mask = 2
+monitorable = false
+script = ExtResource("1_transition")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_area")

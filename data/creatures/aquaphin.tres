@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="CreatureSpecies" load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/creatures/creature_species.gd" id="1_script"]
+[ext_resource type="Resource" path="res://data/elements/tide.tres" id="2_element"]
+[ext_resource type="Texture2D" path="res://assets/creatures/aquaphin.png" id="3_sprite"]
+[ext_resource type="Script" path="res://scripts/creatures/move_data.gd" id="4_move_script"]
+[ext_resource type="Resource" path="res://data/moves/tackle.tres" id="5_tackle"]
+[ext_resource type="Resource" path="res://data/moves/splash.tres" id="6_splash"]
+
+[resource]
+script = ExtResource("1_script")
+id = &"aquaphin"
+display_name = "Aquaphin"
+description = "A playful aquatic creature that manipulates small currents around its body."
+element = ExtResource("2_element")
+role = "Balanced"
+sprite = ExtResource("3_sprite")
+base_hp = 55
+base_attack = 50
+base_defense = 50
+base_speed = 55
+starting_moves = Array[ExtResource("4_move_script")]([ExtResource("5_tackle"), ExtResource("6_splash")])

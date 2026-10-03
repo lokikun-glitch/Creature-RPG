@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="CreatureSpecies" load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/creatures/creature_species.gd" id="1_script"]
+[ext_resource type="Resource" path="res://data/elements/ember.tres" id="2_element"]
+[ext_resource type="Texture2D" path="res://assets/creatures/cindrake.png" id="3_sprite"]
+[ext_resource type="Script" path="res://scripts/creatures/move_data.gd" id="4_move_script"]
+[ext_resource type="Resource" path="res://data/moves/tackle.tres" id="5_tackle"]
+[ext_resource type="Resource" path="res://data/moves/ember.tres" id="6_ember"]
+[ext_resource type="Resource" path="res://data/moves/flame_burst.tres" id="7_flame_burst"]
+
+[resource]
+script = ExtResource("1_script")
+id = &"cindrake"
+display_name = "Cindrake"
+description = "A young drake whose chest glows brighter whenever it is about to breathe sparks."
+element = ExtResource("2_element")
+role = "Offensive"
+sprite = ExtResource("3_sprite")
+base_hp = 48
+base_attack = 65
+base_defense = 38
+base_speed = 62
+starting_moves = Array[ExtResource("4_move_script")]([ExtResource("5_tackle"), ExtResource("6_ember"), ExtResource("7_flame_burst")])

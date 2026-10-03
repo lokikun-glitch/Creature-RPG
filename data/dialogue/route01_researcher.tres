@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="DialogueData" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/dialogue/dialogue_data.gd" id="1_data"]
+[ext_resource type="Script" path="res://scripts/dialogue/dialogue_line.gd" id="2_line"]
+
+[sub_resource type="Resource" id="Resource_line1"]
+script = ExtResource("2_line")
+text = "Shh... the creatures come down to this pond to drink."
+
+[sub_resource type="Resource" id="Resource_line2"]
+script = ExtResource("2_line")
+text = "I'm recording which elements live on Route 01. Ember, Tide, Verdant, and a few plain Neutral types."
+
+[sub_resource type="Resource" id="Resource_line3"]
+script = ExtResource("2_line")
+text = "Ember beats Verdant, Verdant beats Tide, and Tide beats Ember. Remember that and you'll do fine."
+
+[resource]
+script = ExtResource("1_data")
+speaker = "Researcher Wren"
+lines = Array[ExtResource("2_line")]([SubResource("Resource_line1"), SubResource("Resource_line2"), SubResource("Resource_line3")])

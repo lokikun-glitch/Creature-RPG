@@ -1,0 +1,37 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/world.gd" id="1_world"]
+[ext_resource type="PackedScene" path="res://scenes/player/player.tscn" id="2_player"]
+[ext_resource type="PackedScene" path="res://scenes/ui/map_name_banner.tscn" id="3_banner"]
+[ext_resource type="PackedScene" path="res://scenes/ui/dialogue_box.tscn" id="4_dialogue"]
+[ext_resource type="PackedScene" path="res://scenes/ui/title_screen.tscn" id="5_title"]
+[ext_resource type="PackedScene" path="res://scenes/battle/battle_scene.tscn" id="6_battle"]
+[ext_resource type="PackedScene" path="res://scenes/ui/pause_menu.tscn" id="7_pause"]
+[ext_resource type="PackedScene" path="res://scenes/ui/save_notice.tscn" id="8_notice"]
+
+[node name="Main" type="Node"]
+
+[node name="World" type="Node2D" parent="." node_paths=PackedStringArray("player")]
+y_sort_enabled = true
+script = ExtResource("1_world")
+starting_map = "res://scenes/world/maps/fernhollow_town.tscn"
+starting_spawn = &"player_home_front"
+player = NodePath("Player")
+
+[node name="Player" parent="World" instance=ExtResource("2_player")]
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="MapNameBanner" parent="UI" instance=ExtResource("3_banner")]
+
+[node name="DialogueBox" parent="UI" instance=ExtResource("4_dialogue")]
+
+[node name="BattleScene" parent="." instance=ExtResource("6_battle")]
+
+[node name="TitleScreen" parent="." instance=ExtResource("5_title")]
+
+[node name="PauseMenu" parent="." instance=ExtResource("7_pause")]
+
+[node name="SaveNotice" parent="." instance=ExtResource("8_notice")]
+
+[connection signal="map_loaded" from="World" to="UI/MapNameBanner" method="show_for_map"]

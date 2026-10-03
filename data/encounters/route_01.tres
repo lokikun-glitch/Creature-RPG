@@ -1,0 +1,72 @@
+[gd_resource type="Resource" script_class="EncounterTable" load_steps=12 format=3]
+
+[ext_resource type="Script" path="res://scripts/encounters/encounter_table.gd" id="1_table"]
+[ext_resource type="Script" path="res://scripts/encounters/encounter_entry.gd" id="2_entry"]
+
+[sub_resource type="Resource" id="Resource_entry1"]
+script = ExtResource("2_entry")
+species_id = &"flamkit"
+min_level = 2
+max_level = 5
+weight = 15
+
+[sub_resource type="Resource" id="Resource_entry2"]
+script = ExtResource("2_entry")
+species_id = &"aquaphin"
+min_level = 2
+max_level = 5
+weight = 15
+
+[sub_resource type="Resource" id="Resource_entry3"]
+script = ExtResource("2_entry")
+species_id = &"mossaur"
+min_level = 2
+max_level = 5
+weight = 15
+
+[sub_resource type="Resource" id="Resource_entry4"]
+script = ExtResource("2_entry")
+species_id = &"pebblit"
+min_level = 2
+max_level = 5
+weight = 15
+
+[sub_resource type="Resource" id="Resource_entry5"]
+script = ExtResource("2_entry")
+species_id = &"cindrake"
+min_level = 2
+max_level = 5
+weight = 10
+
+[sub_resource type="Resource" id="Resource_entry6"]
+script = ExtResource("2_entry")
+species_id = &"rivulet"
+min_level = 2
+max_level = 5
+weight = 10
+
+[sub_resource type="Resource" id="Resource_entry7"]
+script = ExtResource("2_entry")
+species_id = &"thornling"
+min_level = 2
+max_level = 5
+weight = 10
+
+[sub_resource type="Resource" id="Resource_entry8"]
+script = ExtResource("2_entry")
+species_id = &"brambleox"
+min_level = 2
+max_level = 5
+weight = 5
+
+[sub_resource type="Resource" id="Resource_entry9"]
+script = ExtResource("2_entry")
+species_id = &"tideclaw"
+min_level = 2
+max_level = 5
+weight = 5
+
+[resource]
+script = ExtResource("1_table")
+id = &"route_01"
+entries = Array[ExtResource("2_entry")]([SubResource("Resource_entry1"), SubResource("Resource_entry2"), SubResource("Resource_entry3"), SubResource("Resource_entry4"), SubResource("Resource_entry5"), SubResource("Resource_entry6"), SubResource("Resource_entry7"), SubResource("Resource_entry8"), SubResource("Resource_entry9")])

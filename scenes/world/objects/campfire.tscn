@@ -1,0 +1,25 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/sign_post.gd" id="1_sign"]
+[ext_resource type="Texture2D" path="res://assets/sprites/objects/campfire.png" id="2_tex"]
+[ext_resource type="PackedScene" path="res://scenes/interaction/interactable.tscn" id="3_interactable"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_base"]
+size = Vector2(12, 6)
+
+[node name="Campfire" type="StaticBody2D"]
+collision_mask = 0
+script = ExtResource("1_sign")
+
+[node name="Sprite" type="Sprite2D" parent="."]
+texture = ExtResource("2_tex")
+offset = Vector2(0, -7)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+position = Vector2(0, -3)
+shape = SubResource("RectangleShape2D_base")
+
+[node name="Interactable" parent="." instance=ExtResource("3_interactable")]
+position = Vector2(0, -5)
+interaction_name = "Campfire"
+prompt_offset = Vector2(0, -14)

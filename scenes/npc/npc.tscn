@@ -1,0 +1,31 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/npc/npc.gd" id="1_npc"]
+[ext_resource type="Texture2D" path="res://assets/sprites/npc/villager_a.png" id="2_sheet"]
+[ext_resource type="Script" path="res://scripts/world/character_sprite.gd" id="3_sprite"]
+[ext_resource type="PackedScene" path="res://scenes/interaction/interactable.tscn" id="4_interactable"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_body"]
+size = Vector2(12, 36)
+
+[node name="NPC" type="CharacterBody2D"]
+collision_layer = 4
+collision_mask = 0
+motion_mode = 1
+script = ExtResource("1_npc")
+
+[node name="Sprite" type="Sprite2D" parent="."]
+texture = ExtResource("2_sheet")
+offset = Vector2(0, -9)
+hframes = 3
+vframes = 4
+script = ExtResource("3_sprite")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+position = Vector2(0, -3)
+shape = SubResource("RectangleShape2D_body")
+
+[node name="Interactable" parent="." instance=ExtResource("4_interactable")]
+position = Vector2(0, -3)
+interaction_distance = 26.0
+prompt_offset = Vector2(0, -22)

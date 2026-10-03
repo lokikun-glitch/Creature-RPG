@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="CreatureSpecies" load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/creatures/creature_species.gd" id="1_script"]
+[ext_resource type="Resource" path="res://data/elements/tide.tres" id="2_element"]
+[ext_resource type="Texture2D" path="res://assets/creatures/rivulet.png" id="3_sprite"]
+[ext_resource type="Script" path="res://scripts/creatures/move_data.gd" id="4_move_script"]
+[ext_resource type="Resource" path="res://data/moves/tackle.tres" id="5_tackle"]
+[ext_resource type="Resource" path="res://data/moves/splash.tres" id="6_splash"]
+[ext_resource type="Resource" path="res://data/moves/quick_jab.tres" id="7_quick_jab"]
+
+[resource]
+script = ExtResource("1_script")
+id = &"rivulet"
+display_name = "Rivulet"
+description = "A sleek swimmer that follows streams and leaves little ripples wherever it plays."
+element = ExtResource("2_element")
+role = "Balanced"
+sprite = ExtResource("3_sprite")
+base_hp = 52
+base_attack = 52
+base_defense = 48
+base_speed = 60
+starting_moves = Array[ExtResource("4_move_script")]([ExtResource("5_tackle"), ExtResource("6_splash"), ExtResource("7_quick_jab")])

@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MoveData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/creatures/move_data.gd" id="1_script"]
+[ext_resource type="Resource" path="res://data/elements/verdant.tres" id="2_element"]
+
+[resource]
+script = ExtResource("1_script")
+id = &"vine_whip"
+display_name = "Vine Whip"
+element = ExtResource("2_element")
+power = 45
+description = "Lashes out with a springy vine."

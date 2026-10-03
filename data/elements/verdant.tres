@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="ElementData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/creatures/element_data.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+id = &"verdant"
+display_name = "Verdant"
+color = Color(0.42, 0.72, 0.36, 1)
+strong_against = Array[StringName]([&"tide"])
+weak_against = Array[StringName]([&"ember"])

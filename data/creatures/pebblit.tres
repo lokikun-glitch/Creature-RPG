@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="CreatureSpecies" load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/creatures/creature_species.gd" id="1_script"]
+[ext_resource type="Resource" path="res://data/elements/neutral.tres" id="2_element"]
+[ext_resource type="Texture2D" path="res://assets/creatures/pebblit.png" id="3_sprite"]
+[ext_resource type="Script" path="res://scripts/creatures/move_data.gd" id="4_move_script"]
+[ext_resource type="Resource" path="res://data/moves/tackle.tres" id="5_tackle"]
+[ext_resource type="Resource" path="res://data/moves/quick_jab.tres" id="6_quick_jab"]
+
+[resource]
+script = ExtResource("1_script")
+id = &"pebblit"
+display_name = "Pebblit"
+description = "A small stone-backed creature that prefers quiet places and soaks up warmth from sunlit rocks."
+element = ExtResource("2_element")
+role = "Balanced"
+sprite = ExtResource("3_sprite")
+base_hp = 50
+base_attack = 48
+base_defense = 52
+base_speed = 42
+starting_moves = Array[ExtResource("4_move_script")]([ExtResource("5_tackle"), ExtResource("6_quick_jab")])

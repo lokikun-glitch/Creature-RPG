@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="CreatureSpecies" load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/creatures/creature_species.gd" id="1_script"]
+[ext_resource type="Resource" path="res://data/elements/verdant.tres" id="2_element"]
+[ext_resource type="Texture2D" path="res://assets/creatures/thornling.png" id="3_sprite"]
+[ext_resource type="Script" path="res://scripts/creatures/move_data.gd" id="4_move_script"]
+[ext_resource type="Resource" path="res://data/moves/tackle.tres" id="5_tackle"]
+[ext_resource type="Resource" path="res://data/moves/vine_whip.tres" id="6_vine_whip"]
+[ext_resource type="Resource" path="res://data/moves/leaf_cutter.tres" id="7_leaf_cutter"]
+
+[resource]
+script = ExtResource("1_script")
+id = &"thornling"
+display_name = "Thornling"
+description = "A restless sprout that grows tiny thorns along its arms when it feels challenged."
+element = ExtResource("2_element")
+role = "Offensive"
+sprite = ExtResource("3_sprite")
+base_hp = 50
+base_attack = 58
+base_defense = 45
+base_speed = 55
+starting_moves = Array[ExtResource("4_move_script")]([ExtResource("5_tackle"), ExtResource("6_vine_whip"), ExtResource("7_leaf_cutter")])

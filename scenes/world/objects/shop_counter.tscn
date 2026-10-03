@@ -1,0 +1,27 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/shop_counter.gd" id="1_shop"]
+[ext_resource type="Texture2D" path="res://assets/sprites/objects/market_stall.png" id="2_tex"]
+[ext_resource type="PackedScene" path="res://scenes/interaction/interactable.tscn" id="3_interactable"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_counter"]
+size = Vector2(52, 14)
+
+[node name="ShopCounter" type="StaticBody2D"]
+collision_mask = 0
+script = ExtResource("1_shop")
+
+[node name="Sprite" type="Sprite2D" parent="."]
+texture = ExtResource("2_tex")
+offset = Vector2(0, -22)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+position = Vector2(0, -7)
+shape = SubResource("RectangleShape2D_counter")
+
+[node name="Interactable" parent="." instance=ExtResource("3_interactable")]
+position = Vector2(0, -8)
+interaction_name = "Shop"
+interaction_priority = 1
+requires_line_of_sight = false
+prompt_offset = Vector2(0, -24)

@@ -1,0 +1,228 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/pause_menu.gd" id="1_pause"]
+[ext_resource type="Texture2D" path="res://assets/ui/cursor.png" id="2_cursor"]
+[ext_resource type="PackedScene" path="res://scenes/ui/settings_panel.tscn" id="3_settings"]
+[ext_resource type="PackedScene" path="res://scenes/ui/choice_dialog.tscn" id="4_dialog"]
+[ext_resource type="PackedScene" path="res://scenes/ui/party_screen.tscn" id="5_party"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+content_margin_left = 10.0
+content_margin_top = 6.0
+content_margin_right = 10.0
+content_margin_bottom = 7.0
+bg_color = Color(0.13, 0.13, 0.2, 0.97)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.95, 0.92, 0.85, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_option"]
+content_margin_left = 5.0
+content_margin_top = 1.0
+content_margin_right = 5.0
+content_margin_bottom = 1.0
+bg_color = Color(0, 0, 0, 0)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0, 0, 0, 0)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_right = 2
+corner_radius_bottom_left = 2
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_option_selected"]
+content_margin_left = 5.0
+content_margin_top = 1.0
+content_margin_right = 5.0
+content_margin_bottom = 1.0
+bg_color = Color(0.96, 0.8, 0.42, 0.16)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.96, 0.8, 0.42, 1)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_right = 2
+corner_radius_bottom_left = 2
+
+[node name="PauseMenu" type="CanvasLayer"]
+layer = 40
+script = ExtResource("1_pause")
+option_style = SubResource("StyleBoxFlat_option")
+option_selected_style = SubResource("StyleBoxFlat_option_selected")
+
+[node name="Root" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Dim" type="ColorRect" parent="Root"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.04, 0.04, 0.08, 0.6)
+
+[node name="Center" type="CenterContainer" parent="Root"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Panel" type="PanelContainer" parent="Root/Center"]
+custom_minimum_size = Vector2(130, 0)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="VBox" type="VBoxContainer" parent="Root/Center/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="Heading" type="Label" parent="Root/Center/Panel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.8, 0.42, 1)
+theme_override_font_sizes/font_size = 10
+text = "PAUSED"
+horizontal_alignment = 1
+
+[node name="Options" type="VBoxContainer" parent="Root/Center/Panel/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="ContinueOption" type="PanelContainer" parent="Root/Center/Panel/VBox/Options"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HBox" type="HBoxContainer" parent="Root/Center/Panel/VBox/Options/ContinueOption"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="Cursor" type="TextureRect" parent="Root/Center/Panel/VBox/Options/ContinueOption/HBox"]
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+texture = ExtResource("2_cursor")
+
+[node name="Label" type="Label" parent="Root/Center/Panel/VBox/Options/ContinueOption/HBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 8
+text = "CONTINUE"
+
+[node name="CreaturesOption" type="PanelContainer" parent="Root/Center/Panel/VBox/Options"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HBox" type="HBoxContainer" parent="Root/Center/Panel/VBox/Options/CreaturesOption"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="Cursor" type="TextureRect" parent="Root/Center/Panel/VBox/Options/CreaturesOption/HBox"]
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+texture = ExtResource("2_cursor")
+
+[node name="Label" type="Label" parent="Root/Center/Panel/VBox/Options/CreaturesOption/HBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 8
+text = "CREATURES"
+
+[node name="SaveOption" type="PanelContainer" parent="Root/Center/Panel/VBox/Options"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HBox" type="HBoxContainer" parent="Root/Center/Panel/VBox/Options/SaveOption"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="Cursor" type="TextureRect" parent="Root/Center/Panel/VBox/Options/SaveOption/HBox"]
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+texture = ExtResource("2_cursor")
+
+[node name="Label" type="Label" parent="Root/Center/Panel/VBox/Options/SaveOption/HBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 8
+text = "SAVE GAME"
+
+[node name="SettingsOption" type="PanelContainer" parent="Root/Center/Panel/VBox/Options"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HBox" type="HBoxContainer" parent="Root/Center/Panel/VBox/Options/SettingsOption"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="Cursor" type="TextureRect" parent="Root/Center/Panel/VBox/Options/SettingsOption/HBox"]
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+texture = ExtResource("2_cursor")
+
+[node name="Label" type="Label" parent="Root/Center/Panel/VBox/Options/SettingsOption/HBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 8
+text = "SETTINGS"
+
+[node name="TitleOption" type="PanelContainer" parent="Root/Center/Panel/VBox/Options"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HBox" type="HBoxContainer" parent="Root/Center/Panel/VBox/Options/TitleOption"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="Cursor" type="TextureRect" parent="Root/Center/Panel/VBox/Options/TitleOption/HBox"]
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+texture = ExtResource("2_cursor")
+
+[node name="Label" type="Label" parent="Root/Center/Panel/VBox/Options/TitleOption/HBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 8
+text = "RETURN TO TITLE"
+
+[node name="Status" type="Label" parent="Root/Center/Panel/VBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 9)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.72, 0.7, 0.64, 1)
+theme_override_font_sizes/font_size = 6
+horizontal_alignment = 1
+
+[node name="Settings" parent="Root" instance=ExtResource("3_settings")]
+unique_name_in_owner = true
+layout_mode = 1
+
+[node name="Party" parent="Root" instance=ExtResource("5_party")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+
+[node name="Dialog" parent="Root" instance=ExtResource("4_dialog")]
+unique_name_in_owner = true
+layout_mode = 1
